@@ -1,4 +1,3 @@
-
 const URL_APPS_SCRIPT =
     "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
 
@@ -9,115 +8,137 @@ let configuracionExamen = null;
 let preguntasSeleccionadas = [];
 let preguntaActual = 0;
 let respuestasCorrectas = 0;
-let examenComenzado = false;
+let nombreAlumno = "";
+let cursoAlumno = "";
 
 
 // ========================================
-// MEZCLAR UN ARRAY ALEATORIAMENTE
+// MEZCLAR ELEMENTOS AL AZAR
 // ========================================
 
 function mezclarArray(array) {
-
     const copia = [...array];
 
     for (let i = copia.length - 1; i > 0; i--) {
-
         const j = Math.floor(Math.random() * (i + 1));
-
         [copia[i], copia[j]] = [copia[j], copia[i]];
-
     }
 
     return copia;
-
 }
 
 
 // ========================================
-// ELEGIR LAS PREGUNTAS DEL ALUMNO
-// ========================================
-
-function seleccionarPreguntas() {
-
-    const todasLasPreguntas = configuracionExamen.preguntas;
-
-    const cantidad = Number(
-        configuracionExamen.preguntasPorAlumno
-    );
-
-    if (
-        !Number.isInteger(cantidad) ||
-        cantidad < 1 ||
-        cantidad > todasLasPreguntas.length
-    ) {
-
-        alert("La cantidad de preguntas configurada no es válida.");
-        return false;
-
-    }
-
-    // Mezclar las preguntas disponibles y tomar solo la cantidad indicada.
-    preguntasSeleccionadas = mezclarArray(todasLasPreguntas)
-        .slice(0, cantidad);
-
-    console.log(
-        "Preguntas disponibles:",
-        todasLasPreguntas.length
-    );
-
-    console.log(
-        "Preguntas seleccionadas para este alumno:",
-        preguntasSeleccionadas.length
-    );
-
-    return true;
-
-}
-
-
-// ========================================
-// CARGAR EXAMEN DESDE GOOGLE
+// CARGAR CONFIGURACIÓN DEL EXAMEN
 // ========================================
 
 async function cargarExamen() {
-
     if (!idExamen) {
-
-        alert("No se encontró el ID del examen.");
+        mostrarError("No se encontró el ID del examen en el enlace.");
         return;
-
     }
 
     try {
-
         const respuesta = await fetch(
             URL_APPS_SCRIPT + "?id=" + encodeURIComponent(idExamen)
         );
 
         const datos = await respuesta.json();
 
-        console.log("Examen recibido:", datos);
+        console.log("Datos recibidos de Apps Script:", datos);
 
-        if (!datos.ok) {
-
-            alert("No se encontró ese examen.");
+        if (!respuesta.ok || !datos.ok || !datos.examen) {
+            mostrarError("No se encontró el examen. Revisá el enlace.");
             return;
-
         }
 
-        configuracionExamen = datos.examen;
+        const examen = datos.examen;
+
+        if (!Array.isArray(examen.preguntas)) {
+            mostrarError(
+                "El servidor no devolvió correctamente las preguntas. " +
+                "Revisá la implementación de Apps Script."
+            );
+            return;
+        }
+
+        const disponibles = Number(examen.cantidadPreguntas);
+        const porAlumno = Number(examen.preguntasPorAlumno);
+
+        // No confundir las preguntas disponibles con las que responde cada alumno.
+        if (
+            !Number.isInteger(porAlumno) ||
+            porAlumno < 1 ||
+            porAlumno > examen.preguntas.length
+        ) {
+            mostrarError(
+                "No se pudo confirmar la cantidad de preguntas por alumno. " +
+                "El servidor debe devolver preguntasPorAlumno y cantidadPreguntas " +
+                "por separado. Revisá la versión implementada de Código.gs."
+            );
+
+            console.error("Configuración recibida:", {
+                cantidadPreguntas: examen.cantidadPreguntas,
+                preguntasPorAlumno: examen.preguntasPorAlumno,
+                preguntasRecibidas: examen.preguntas.length
+            });
+
+            return;
+        }
+
+        if (
+            !Number.isInteger(disponibles) ||
+            disponibles !== examen.preguntas.length
+        ) {
+            console.warn(
+                "La cantidad disponible guardada no coincide con el array recibido."
+            );
+        }
+
+        configuracionExamen = examen;
 
         document.getElementById("nombreMateria").textContent =
-            configuracionExamen.materia;
+            examen.materia || "Examen";
+
+        console.log("Preguntas disponibles:", examen.preguntas.length);
+        console.log("Preguntas que debe responder el alumno:", porAlumno);
 
     } catch (error) {
-
         console.error("Error cargando examen:", error);
+        mostrarError(
+            "No se pudo cargar el examen. Revisá tu conexión y Apps Script."
+        );
+    }
+}
 
-        alert("No se pudo cargar el examen.");
 
+// ========================================
+// MOSTRAR ERROR
+// ========================================
+
+function mostrarError(mensaje) {
+    const inicio = document.getElementById("pantallaInicio");
+
+    if (inicio) {
+        inicio.style.display = "block";
+
+        let aviso = document.getElementById("errorExamen");
+
+        if (!aviso) {
+            aviso = document.createElement("p");
+            aviso.id = "errorExamen";
+            inicio.prepend(aviso);
+        }
+
+        aviso.textContent = mensaje;
+        aviso.style.color = "#b42318";
     }
 
+    const pantalla = document.getElementById("pantallaExamen");
+
+    if (pantalla) {
+        pantalla.style.display = "none";
+    }
 }
 
 
@@ -126,37 +147,35 @@ async function cargarExamen() {
 // ========================================
 
 function comenzarExamen() {
-
     if (!configuracionExamen) {
-
-        alert("El examen todavía se está cargando. Esperá un momento.");
+        alert("El examen todavía no está listo. Esperá un momento.");
         return;
-
     }
 
-    const nombre = document.getElementById("nombre").value.trim();
-    const curso = document.getElementById("curso").value.trim();
+    nombreAlumno = document.getElementById("nombre").value.trim();
+    cursoAlumno = document.getElementById("curso").value.trim();
 
-    if (!nombre) {
-
+    if (!nombreAlumno) {
         alert("Escribí tu nombre antes de comenzar.");
         return;
-
     }
 
-    if (!curso) {
-
+    if (!cursoAlumno) {
         alert("Escribí tu curso antes de comenzar.");
         return;
-
     }
 
-    // Seleccionar las preguntas antes de comenzar.
-    if (!seleccionarPreguntas()) {
+    const cantidad = Number(configuracionExamen.preguntasPorAlumno);
+
+    // Seleccionar únicamente la cantidad configurada para cada alumno.
+    preguntasSeleccionadas = mezclarArray(configuracionExamen.preguntas)
+        .slice(0, cantidad);
+
+    if (preguntasSeleccionadas.length !== cantidad) {
+        mostrarError("No se pudo seleccionar la cantidad correcta de preguntas.");
         return;
     }
 
-    examenComenzado = true;
     preguntaActual = 0;
     respuestasCorrectas = 0;
 
@@ -164,7 +183,6 @@ function comenzarExamen() {
     document.getElementById("pantallaExamen").style.display = "block";
 
     mostrarPregunta();
-
 }
 
 
@@ -173,29 +191,15 @@ function comenzarExamen() {
 // ========================================
 
 function mostrarPregunta() {
-
     if (preguntaActual >= preguntasSeleccionadas.length) {
-
         terminarExamen();
         return;
-
     }
 
     const pregunta = preguntasSeleccionadas[preguntaActual];
 
-    const opcionesMezcladas = pregunta.opciones.map(
-        (texto, indice) => ({
-            texto: texto,
-            indiceOriginal: indice
-        })
-    );
-
-    // Mezclar las respuestas sin perder cuál es la correcta.
-    const opcionesOrdenadas = mezclarArray(opcionesMezcladas);
-
     document.getElementById("numeroPregunta").textContent =
-        "Pregunta " + (preguntaActual + 1) +
-        " de " + preguntasSeleccionadas.length;
+        `Pregunta ${preguntaActual + 1} de ${preguntasSeleccionadas.length}`;
 
     document.getElementById("textoPregunta").textContent =
         pregunta.pregunta;
@@ -205,22 +209,26 @@ function mostrarPregunta() {
 
     document.getElementById("resultado").textContent = "";
 
-    opcionesOrdenadas.forEach((opcion) => {
+    const respuestas = mezclarArray(
+        pregunta.opciones.map((texto, indice) => ({
+            texto,
+            indiceOriginal: indice
+        }))
+    );
 
+    respuestas.forEach((opcion) => {
         const boton = document.createElement("button");
 
-        boton.textContent = opcion.texto;
         boton.type = "button";
         boton.className = "opcion";
+        boton.textContent = opcion.texto;
 
-        boton.onclick = function () {
+        boton.addEventListener("click", () => {
             comprobarRespuesta(opcion.indiceOriginal);
-        };
+        });
 
         opciones.appendChild(boton);
-
     });
-
 }
 
 
@@ -229,10 +237,8 @@ function mostrarPregunta() {
 // ========================================
 
 function comprobarRespuesta(respuestaElegida) {
-
     const pregunta = preguntasSeleccionadas[preguntaActual];
-
-    const botones = document.querySelectorAll(".opcion");
+    const botones = document.querySelectorAll("#opciones .opcion");
 
     botones.forEach((boton) => {
         boton.disabled = true;
@@ -240,26 +246,22 @@ function comprobarRespuesta(respuestaElegida) {
 
     const resultado = document.getElementById("resultado");
 
-    if (respuestaElegida === pregunta.correcta) {
-
+    if (respuestaElegida === Number(pregunta.correcta)) {
         respuestasCorrectas++;
-        resultado.textContent = "✅ ¡Correcto!";
-
+        resultado.textContent = "¡Correcto!";
+        resultado.className = "correcto";
     } else {
-
         resultado.textContent =
-            "❌ Incorrecto. La respuesta correcta era: " +
-            pregunta.opciones[pregunta.correcta];
+            "Incorrecto. La respuesta correcta era: " +
+            pregunta.opciones[Number(pregunta.correcta)];
 
+        resultado.className = "incorrecto";
     }
 
-    setTimeout(function () {
-
+    setTimeout(() => {
         preguntaActual++;
         mostrarPregunta();
-
     }, 1200);
-
 }
 
 
@@ -268,25 +270,24 @@ function comprobarRespuesta(respuestaElegida) {
 // ========================================
 
 function terminarExamen() {
-
     const pantalla = document.getElementById("pantallaExamen");
+    const total = preguntasSeleccionadas.length;
 
-    pantalla.innerHTML = `
-        <h2>🎉 Examen terminado</h2>
-        <p>
-            Respondiste correctamente
-            ${respuestasCorrectas}
-            de
-            ${preguntasSeleccionadas.length}
-            preguntas.
-        </p>
-    `;
+    pantalla.innerHTML = "";
 
+    const titulo = document.createElement("h2");
+    titulo.textContent = "¡Examen terminado!";
+
+    const resumen = document.createElement("p");
+    resumen.textContent =
+        `Respondiste correctamente ${respuestasCorrectas} de ${total} preguntas.`;
+
+    pantalla.append(titulo, resumen);
 }
 
 
 // ========================================
-// CARGAR AL ABRIR LA PÁGINA
+// INICIAR CARGA
 // ========================================
 
 cargarExamen();
