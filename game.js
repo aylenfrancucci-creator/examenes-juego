@@ -1,37 +1,78 @@
-// ========================================
-// CONFIGURACIÓN
-// ========================================
 
 const URL_APPS_SCRIPT =
     "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
 
-
-// ========================================
-// OBTENER ID DEL EXAMEN
-// ========================================
-
-const parametros =
-    new URLSearchParams(
-        window.location.search
-    );
-
-const idExamen =
-    parametros.get("id");
-
-
-// ========================================
-// VARIABLES DEL EXAMEN
-// ========================================
+const parametros = new URLSearchParams(window.location.search);
+const idExamen = parametros.get("id");
 
 let configuracionExamen = null;
-
 let preguntasSeleccionadas = [];
-
 let preguntaActual = 0;
-
 let respuestasCorrectas = 0;
-
 let examenComenzado = false;
+
+
+// ========================================
+// MEZCLAR UN ARRAY ALEATORIAMENTE
+// ========================================
+
+function mezclarArray(array) {
+
+    const copia = [...array];
+
+    for (let i = copia.length - 1; i > 0; i--) {
+
+        const j = Math.floor(Math.random() * (i + 1));
+
+        [copia[i], copia[j]] = [copia[j], copia[i]];
+
+    }
+
+    return copia;
+
+}
+
+
+// ========================================
+// ELEGIR LAS PREGUNTAS DEL ALUMNO
+// ========================================
+
+function seleccionarPreguntas() {
+
+    const todasLasPreguntas = configuracionExamen.preguntas;
+
+    const cantidad = Number(
+        configuracionExamen.preguntasPorAlumno
+    );
+
+    if (
+        !Number.isInteger(cantidad) ||
+        cantidad < 1 ||
+        cantidad > todasLasPreguntas.length
+    ) {
+
+        alert("La cantidad de preguntas configurada no es válida.");
+        return false;
+
+    }
+
+    // Mezclar las preguntas disponibles y tomar solo la cantidad indicada.
+    preguntasSeleccionadas = mezclarArray(todasLasPreguntas)
+        .slice(0, cantidad);
+
+    console.log(
+        "Preguntas disponibles:",
+        todasLasPreguntas.length
+    );
+
+    console.log(
+        "Preguntas seleccionadas para este alumno:",
+        preguntasSeleccionadas.length
+    );
+
+    return true;
+
+}
 
 
 // ========================================
@@ -42,148 +83,40 @@ async function cargarExamen() {
 
     if (!idExamen) {
 
-        alert(
-            "No se encontró el ID del examen."
-        );
-
+        alert("No se encontró el ID del examen.");
         return;
+
     }
 
     try {
 
-        const respuesta =
-            await fetch(
-                URL_APPS_SCRIPT +
-                "?id=" +
-                encodeURIComponent(idExamen)
-            );
-
-        const datos =
-            await respuesta.json();
-
-        console.log(
-            "Examen recibido:",
-            datos
+        const respuesta = await fetch(
+            URL_APPS_SCRIPT + "?id=" + encodeURIComponent(idExamen)
         );
+
+        const datos = await respuesta.json();
+
+        console.log("Examen recibido:", datos);
 
         if (!datos.ok) {
 
-            alert(
-                "No se encontró ese examen."
-            );
-
+            alert("No se encontró ese examen.");
             return;
-        }
-
-        configuracionExamen =
-            datos.examen;
-
-        console.log(
-            "Configuración cargada:",
-            configuracionExamen
-        );
-
-        const nombreMateria =
-            document.getElementById(
-                "nombreMateria"
-            );
-
-        if (nombreMateria) {
-
-            nombreMateria.textContent =
-                configuracionExamen.materia;
 
         }
+
+        configuracionExamen = datos.examen;
+
+        document.getElementById("nombreMateria").textContent =
+            configuracionExamen.materia;
 
     } catch (error) {
 
-        console.error(
-            "Error cargando examen:",
-            error
-        );
+        console.error("Error cargando examen:", error);
 
-        alert(
-            "No se pudo cargar el examen."
-        );
+        alert("No se pudo cargar el examen.");
 
     }
-
-}
-
-
-// ========================================
-// MEZCLAR ARRAY
-// ========================================
-
-function mezclarArray(array) {
-
-    const copia =
-        [...array];
-
-
-    for (
-        let i = copia.length - 1;
-        i > 0;
-        i--
-    ) {
-
-        const j =
-            Math.floor(
-                Math.random() * (i + 1)
-            );
-
-
-        [
-            copia[i],
-            copia[j]
-        ] =
-        [
-            copia[j],
-            copia[i]
-        ];
-
-    }
-
-
-    return copia;
-
-}
-
-
-// ========================================
-// SELECCIONAR PREGUNTAS DEL ALUMNO
-// ========================================
-
-function seleccionarPreguntas() {
-
-    const preguntas =
-        configuracionExamen.preguntas;
-
-
-    const cantidad =
-        configuracionExamen.preguntasPorAlumno;
-
-
-    // Mezclamos todas las preguntas
-
-    const preguntasMezcladas =
-        mezclarArray(preguntas);
-
-
-    // Tomamos solamente la cantidad
-    // que corresponde a cada alumno
-
-    preguntasSeleccionadas =
-        preguntasMezcladas.slice(
-            0,
-            cantidad
-        );
-
-
-    console.log(
-        "Preguntas seleccionadas para este alumno:",
-        preguntasSeleccionadas
-    );
 
 }
 
@@ -196,67 +129,39 @@ function comenzarExamen() {
 
     if (!configuracionExamen) {
 
-        alert(
-            "El examen todavía se está cargando. Esperá un momento."
-        );
-
+        alert("El examen todavía se está cargando. Esperá un momento.");
         return;
+
     }
 
-    const nombre =
-        document
-            .getElementById("nombre")
-            .value
-            .trim();
+    const nombre = document.getElementById("nombre").value.trim();
+    const curso = document.getElementById("curso").value.trim();
 
-    if (nombre === "") {
+    if (!nombre) {
 
-        alert(
-            "Escribí tu nombre antes de comenzar."
-        );
-
+        alert("Escribí tu nombre antes de comenzar.");
         return;
+
     }
 
-    const curso =
-        document
-            .getElementById("curso")
-            .value
-            .trim();
+    if (!curso) {
 
-    if (curso === "") {
-
-        alert(
-            "Escribí tu curso antes de comenzar."
-        );
-
+        alert("Escribí tu curso antes de comenzar.");
         return;
+
     }
 
-
-    // ========================================
-    // SELECCIONAR PREGUNTAS
-    // ========================================
-
-    seleccionarPreguntas();
-
+    // Seleccionar las preguntas antes de comenzar.
+    if (!seleccionarPreguntas()) {
+        return;
+    }
 
     examenComenzado = true;
-
     preguntaActual = 0;
-
     respuestasCorrectas = 0;
 
-
-    document.getElementById(
-        "pantallaInicio"
-    ).style.display = "none";
-
-
-    document.getElementById(
-        "pantallaExamen"
-    ).style.display = "block";
-
+    document.getElementById("pantallaInicio").style.display = "none";
+    document.getElementById("pantallaExamen").style.display = "block";
 
     mostrarPregunta();
 
@@ -264,156 +169,57 @@ function comenzarExamen() {
 
 
 // ========================================
-// MOSTRAR UNA SOLA PREGUNTA
+// MOSTRAR PREGUNTA
 // ========================================
 
 function mostrarPregunta() {
 
-    const preguntas =
-        preguntasSeleccionadas;
-
-
-    // ¿Terminamos?
-
-    if (
-        preguntaActual >=
-        preguntas.length
-    ) {
+    if (preguntaActual >= preguntasSeleccionadas.length) {
 
         terminarExamen();
-
         return;
-    }
-
-
-    // Obtener pregunta actual
-
-    const pregunta =
-        preguntas[preguntaActual];
-
-
-    // ========================================
-    // MEZCLAR LAS OPCIONES
-    // ========================================
-
-    const opcionesMezcladas =
-        pregunta.opciones.map(
-            (texto, indice) => ({
-                texto: texto,
-                indiceOriginal: indice
-            })
-        );
-
-
-    // Mezclar aleatoriamente
-
-    for (
-        let i = opcionesMezcladas.length - 1;
-        i > 0;
-        i--
-    ) {
-
-        const j =
-            Math.floor(
-                Math.random() * (i + 1)
-            );
-
-        [
-            opcionesMezcladas[i],
-            opcionesMezcladas[j]
-        ] =
-        [
-            opcionesMezcladas[j],
-            opcionesMezcladas[i]
-        ];
 
     }
 
+    const pregunta = preguntasSeleccionadas[preguntaActual];
 
-    // ========================================
-    // NÚMERO DE PREGUNTA
-    // ========================================
+    const opcionesMezcladas = pregunta.opciones.map(
+        (texto, indice) => ({
+            texto: texto,
+            indiceOriginal: indice
+        })
+    );
 
-    document.getElementById(
-        "numeroPregunta"
-    ).textContent =
-        "Pregunta " +
-        (preguntaActual + 1) +
-        " de " +
-        preguntas.length;
+    // Mezclar las respuestas sin perder cuál es la correcta.
+    const opcionesOrdenadas = mezclarArray(opcionesMezcladas);
 
+    document.getElementById("numeroPregunta").textContent =
+        "Pregunta " + (preguntaActual + 1) +
+        " de " + preguntasSeleccionadas.length;
 
-    // ========================================
-    // TEXTO DE LA PREGUNTA
-    // ========================================
-
-    document.getElementById(
-        "textoPregunta"
-    ).textContent =
+    document.getElementById("textoPregunta").textContent =
         pregunta.pregunta;
 
-
-    // ========================================
-    // CONTENEDOR DE OPCIONES
-    // ========================================
-
-    const opciones =
-        document.getElementById(
-            "opciones"
-        );
-
-
+    const opciones = document.getElementById("opciones");
     opciones.innerHTML = "";
 
+    document.getElementById("resultado").textContent = "";
 
-    // Limpiar resultado anterior
+    opcionesOrdenadas.forEach((opcion) => {
 
-    document.getElementById(
-        "resultado"
-    ).textContent = "";
+        const boton = document.createElement("button");
 
+        boton.textContent = opcion.texto;
+        boton.type = "button";
+        boton.className = "opcion";
 
-    // ========================================
-    // CREAR BOTONES
-    // ========================================
+        boton.onclick = function () {
+            comprobarRespuesta(opcion.indiceOriginal);
+        };
 
-    opcionesMezcladas.forEach(
-        (opcion) => {
+        opciones.appendChild(boton);
 
-            const boton =
-                document.createElement(
-                    "button"
-                );
-
-
-            boton.textContent =
-                opcion.texto;
-
-
-            boton.type =
-                "button";
-
-
-            boton.className =
-                "opcion";
-
-
-            boton.onclick =
-                function () {
-
-                    comprobarRespuesta(
-                        opcion.indiceOriginal
-                    );
-
-                };
-
-
-            opciones.appendChild(
-                boton
-            );
-
-        }
-    );
+    });
 
 }
 
@@ -422,74 +228,37 @@ function mostrarPregunta() {
 // COMPROBAR RESPUESTA
 // ========================================
 
-function comprobarRespuesta(
-    respuestaElegida
-) {
+function comprobarRespuesta(respuestaElegida) {
 
-    const pregunta =
-        preguntasSeleccionadas[
-            preguntaActual
-        ];
+    const pregunta = preguntasSeleccionadas[preguntaActual];
 
+    const botones = document.querySelectorAll(".opcion");
 
-    const botones =
-        document.querySelectorAll(
-            ".opcion"
-        );
+    botones.forEach((boton) => {
+        boton.disabled = true;
+    });
 
+    const resultado = document.getElementById("resultado");
 
-    // Evitar responder dos veces
-
-    botones.forEach(
-        boton => {
-
-            boton.disabled = true;
-
-        }
-    );
-
-
-    const resultado =
-        document.getElementById(
-            "resultado"
-        );
-
-
-    if (
-        respuestaElegida ===
-        pregunta.correcta
-    ) {
+    if (respuestaElegida === pregunta.correcta) {
 
         respuestasCorrectas++;
-
-
-        resultado.textContent =
-            "✅ ¡Correcto!";
+        resultado.textContent = "✅ ¡Correcto!";
 
     } else {
 
         resultado.textContent =
             "❌ Incorrecto. La respuesta correcta era: " +
-            pregunta.opciones[
-                pregunta.correcta
-            ];
+            pregunta.opciones[pregunta.correcta];
 
     }
 
+    setTimeout(function () {
 
-    // Esperar antes de pasar
-    // a la siguiente pregunta
+        preguntaActual++;
+        mostrarPregunta();
 
-    setTimeout(
-        function () {
-
-            preguntaActual++;
-
-            mostrarPregunta();
-
-        },
-        1200
-    );
+    }, 1200);
 
 }
 
@@ -500,16 +269,10 @@ function comprobarRespuesta(
 
 function terminarExamen() {
 
-    const pantalla =
-        document.getElementById(
-            "pantallaExamen"
-        );
-
+    const pantalla = document.getElementById("pantallaExamen");
 
     pantalla.innerHTML = `
-
         <h2>🎉 Examen terminado</h2>
-
         <p>
             Respondiste correctamente
             ${respuestasCorrectas}
@@ -517,14 +280,13 @@ function terminarExamen() {
             ${preguntasSeleccionadas.length}
             preguntas.
         </p>
-
     `;
 
 }
 
 
 // ========================================
-// COMENZAR A CARGAR
+// CARGAR AL ABRIR LA PÁGINA
 // ========================================
 
 cargarExamen();
