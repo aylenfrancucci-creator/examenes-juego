@@ -25,6 +25,8 @@ const idExamen =
 
 let configuracionExamen = null;
 
+let preguntasSeleccionadas = [];
+
 let preguntaActual = 0;
 
 let respuestasCorrectas = 0;
@@ -110,6 +112,83 @@ async function cargarExamen() {
 
 
 // ========================================
+// MEZCLAR ARRAY
+// ========================================
+
+function mezclarArray(array) {
+
+    const copia =
+        [...array];
+
+
+    for (
+        let i = copia.length - 1;
+        i > 0;
+        i--
+    ) {
+
+        const j =
+            Math.floor(
+                Math.random() * (i + 1)
+            );
+
+
+        [
+            copia[i],
+            copia[j]
+        ] =
+        [
+            copia[j],
+            copia[i]
+        ];
+
+    }
+
+
+    return copia;
+
+}
+
+
+// ========================================
+// SELECCIONAR PREGUNTAS DEL ALUMNO
+// ========================================
+
+function seleccionarPreguntas() {
+
+    const preguntas =
+        configuracionExamen.preguntas;
+
+
+    const cantidad =
+        configuracionExamen.preguntasPorAlumno;
+
+
+    // Mezclamos todas las preguntas
+
+    const preguntasMezcladas =
+        mezclarArray(preguntas);
+
+
+    // Tomamos solamente la cantidad
+    // que corresponde a cada alumno
+
+    preguntasSeleccionadas =
+        preguntasMezcladas.slice(
+            0,
+            cantidad
+        );
+
+
+    console.log(
+        "Preguntas seleccionadas para este alumno:",
+        preguntasSeleccionadas
+    );
+
+}
+
+
+// ========================================
 // COMENZAR EXAMEN
 // ========================================
 
@@ -154,19 +233,30 @@ function comenzarExamen() {
         return;
     }
 
+
+    // ========================================
+    // SELECCIONAR PREGUNTAS
+    // ========================================
+
+    seleccionarPreguntas();
+
+
     examenComenzado = true;
 
     preguntaActual = 0;
 
     respuestasCorrectas = 0;
 
+
     document.getElementById(
         "pantallaInicio"
     ).style.display = "none";
 
+
     document.getElementById(
         "pantallaExamen"
     ).style.display = "block";
+
 
     mostrarPregunta();
 
@@ -180,7 +270,7 @@ function comenzarExamen() {
 function mostrarPregunta() {
 
     const preguntas =
-        configuracionExamen.preguntas;
+        preguntasSeleccionadas;
 
 
     // ¿Terminamos?
@@ -272,6 +362,7 @@ function mostrarPregunta() {
             "opciones"
         );
 
+
     opciones.innerHTML = "";
 
 
@@ -294,14 +385,18 @@ function mostrarPregunta() {
                     "button"
                 );
 
+
             boton.textContent =
                 opcion.texto;
+
 
             boton.type =
                 "button";
 
+
             boton.className =
                 "opcion";
+
 
             boton.onclick =
                 function () {
@@ -311,6 +406,7 @@ function mostrarPregunta() {
                     );
 
                 };
+
 
             opciones.appendChild(
                 boton
@@ -331,8 +427,9 @@ function comprobarRespuesta(
 ) {
 
     const pregunta =
-        configuracionExamen
-            .preguntas[preguntaActual];
+        preguntasSeleccionadas[
+            preguntaActual
+        ];
 
 
     const botones =
@@ -364,6 +461,7 @@ function comprobarRespuesta(
     ) {
 
         respuestasCorrectas++;
+
 
         resultado.textContent =
             "✅ ¡Correcto!";
@@ -407,6 +505,7 @@ function terminarExamen() {
             "pantallaExamen"
         );
 
+
     pantalla.innerHTML = `
 
         <h2>🎉 Examen terminado</h2>
@@ -415,7 +514,7 @@ function terminarExamen() {
             Respondiste correctamente
             ${respuestasCorrectas}
             de
-            ${configuracionExamen.preguntas.length}
+            ${preguntasSeleccionadas.length}
             preguntas.
         </p>
 
