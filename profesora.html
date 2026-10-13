@@ -1,13 +1,11 @@
-<!DOCTYPE html>
 
+<!DOCTYPE html>
 <html lang="es">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>Configurar examen</title>
-
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -18,33 +16,25 @@
     <h1>⚙️ Configurar examen</h1>
 
     <p>Materia:</p>
+    <input type="text" id="materia" placeholder="Ej: Historia">
 
-    <input
-        type="text"
-        id="materia"
-        placeholder="Ej: Historia"
-    >
-
-
-    <p>Preguntas disponibles:</p>
-
+    <p>Cantidad total de preguntas disponibles:</p>
     <input
         type="number"
         id="cantidadPreguntas"
         min="1"
         max="50"
-        value="10"
+        value="5"
     >
 
-    <p>Preguntas por alumno:</p>
-
+    <p>Cantidad de preguntas por alumno:</p>
     <input
         type="number"
         id="preguntasPorAlumno"
         min="1"
-        value="5"
+        max="50"
+        value="2"
     >
-
 
     <h2>Preguntas</h2>
 
@@ -52,450 +42,325 @@
 
     <br>
 
-    <button
-        type="button"
-        onclick="generarPreguntas()"
-    >
+    <button type="button" onclick="generarPreguntas()">
         Crear preguntas
     </button>
 
-    <br>
-    <br>
+    <br><br>
 
-    <button
-        type="button"
-        onclick="crearExamen()"
-    >
+    <button type="button" id="botonCrear" onclick="crearExamen()">
         Generar examen
     </button>
 
+    <div id="resultadoCreacion"></div>
+
 </div>
 
-
 <script>
-
     // ========================================
     // URL DE GOOGLE APPS SCRIPT
     // ========================================
 
     const URL_APPS_SCRIPT =
-        "https://script.google.com/macros/s/AKfycbxRunM6BUjUQNyg1rXFrJqUtvToarADE1JDu-cmhae_ljq07cfCYOB737EmjrgWnyLT/exec";
+        "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
 
 
     // ========================================
-    // CREAR PREGUNTAS
+    // GENERAR CAMPOS DE PREGUNTAS
     // ========================================
 
     function generarPreguntas() {
 
-        const cantidad =
-            Number(
-                document
-                    .getElementById("cantidadPreguntas")
-                    .value
-            );
+        const cantidad = Number(
+            document.getElementById("cantidadPreguntas").value
+        );
 
+        const porAlumno = Number(
+            document.getElementById("preguntasPorAlumno").value
+        );
 
         if (
             !Number.isInteger(cantidad) ||
             cantidad < 1 ||
             cantidad > 50
         ) {
-
-            alert(
-                "La cantidad de preguntas disponibles debe estar entre 1 y 50."
-            );
-
+            alert("La cantidad disponible debe estar entre 1 y 50.");
             return;
         }
-
-
-        const preguntasPorAlumno =
-            Number(
-                document
-                    .getElementById("preguntasPorAlumno")
-                    .value
-            );
-
 
         if (
-            !Number.isInteger(preguntasPorAlumno) ||
-            preguntasPorAlumno < 1
+            !Number.isInteger(porAlumno) ||
+            porAlumno < 1 ||
+            porAlumno > cantidad
         ) {
-
             alert(
-                "La cantidad de preguntas por alumno debe ser válida."
+                "La cantidad por alumno debe ser al menos 1 y no superar las preguntas disponibles."
             );
-
             return;
         }
 
-
-        if (preguntasPorAlumno > cantidad) {
-
-            alert(
-                "No puede haber más preguntas por alumno que preguntas disponibles."
-            );
-
-            return;
-        }
-
-
-        const contenedor =
-            document.getElementById("preguntas");
-
-
+        const contenedor = document.getElementById("preguntas");
         contenedor.innerHTML = "";
-
 
         for (let i = 0; i < cantidad; i++) {
 
-            const bloque =
-                document.createElement("div");
-
-
+            const bloque = document.createElement("div");
             bloque.className = "pregunta";
 
-
             bloque.innerHTML = `
-
                 <hr>
-
                 <h3>Pregunta ${i + 1}</h3>
 
-                <p>Pregunta:</p>
-
-                <input
-                    type="text"
-                    placeholder="Escribí la pregunta"
-                >
+                <p>Enunciado:</p>
+                <input type="text" class="enunciado"
+                    placeholder="Escribí la pregunta">
 
                 <p>Respuesta 1:</p>
-
-                <input
-                    type="text"
-                    placeholder="Respuesta"
-                >
+                <input type="text" class="opcion"
+                    placeholder="Escribí la respuesta">
 
                 <p>Respuesta 2:</p>
-
-                <input
-                    type="text"
-                    placeholder="Respuesta"
-                >
+                <input type="text" class="opcion"
+                    placeholder="Escribí la respuesta">
 
                 <p>Respuesta 3:</p>
-
-                <input
-                    type="text"
-                    placeholder="Respuesta"
-                >
+                <input type="text" class="opcion"
+                    placeholder="Escribí la respuesta">
 
                 <p>Respuesta 4:</p>
-
-                <input
-                    type="text"
-                    placeholder="Respuesta"
-                >
+                <input type="text" class="opcion"
+                    placeholder="Escribí la respuesta">
 
                 <p>Respuesta correcta:</p>
-
-                <select>
-
-                    <option value="0">
-                        Respuesta 1
-                    </option>
-
-                    <option value="1">
-                        Respuesta 2
-                    </option>
-
-                    <option value="2">
-                        Respuesta 3
-                    </option>
-
-                    <option value="3">
-                        Respuesta 4
-                    </option>
-
+                <select class="correcta">
+                    <option value="0">Respuesta 1</option>
+                    <option value="1">Respuesta 2</option>
+                    <option value="2">Respuesta 3</option>
+                    <option value="3">Respuesta 4</option>
                 </select>
-
-                <br>
-                <br>
-
+                <br><br>
             `;
 
-
             contenedor.appendChild(bloque);
-
         }
-
     }
 
 
     // ========================================
-    // CREAR ID ÚNICO
+    // GENERAR ID ÚNICO
     // ========================================
 
     function generarID() {
 
         return (
             Date.now().toString(36) +
-            Math.random()
-                .toString(36)
-                .substring(2, 8)
+            Math.random().toString(36).substring(2, 8)
         );
 
     }
 
 
     // ========================================
-    // GENERAR EXAMEN
+    // CREAR Y GUARDAR EXAMEN
     // ========================================
 
     async function crearExamen() {
 
-        const materia =
-            document
-                .getElementById("materia")
-                .value
-                .trim();
+        const materia = document
+            .getElementById("materia")
+            .value.trim();
 
+        const cantidad = Number(
+            document.getElementById("cantidadPreguntas").value
+        );
 
-        const cantidad =
-            Number(
-                document
-                    .getElementById("cantidadPreguntas")
-                    .value
-            );
+        const preguntasPorAlumno = Number(
+            document.getElementById("preguntasPorAlumno").value
+        );
 
+        const bloques = document.querySelectorAll(".pregunta");
 
-        const preguntasPorAlumno =
-            Number(
-                document
-                    .getElementById("preguntasPorAlumno")
-                    .value
-            );
-
-
-        if (materia === "") {
-
-            alert(
-                "Escribí el nombre de la materia."
-            );
-
+        if (!materia) {
+            alert("Escribí el nombre de la materia.");
             return;
-
         }
-
 
         if (
             !Number.isInteger(cantidad) ||
             cantidad < 1 ||
             cantidad > 50
         ) {
-
-            alert(
-                "La cantidad de preguntas disponibles debe estar entre 1 y 50."
-            );
-
+            alert("La cantidad disponible debe estar entre 1 y 50.");
             return;
-
         }
-
 
         if (
             !Number.isInteger(preguntasPorAlumno) ||
-            preguntasPorAlumno < 1
+            preguntasPorAlumno < 1 ||
+            preguntasPorAlumno > cantidad
         ) {
-
             alert(
-                "La cantidad de preguntas por alumno debe ser válida."
+                "La cantidad por alumno debe estar entre 1 y la cantidad disponible."
             );
-
             return;
-
         }
-
-
-        if (preguntasPorAlumno > cantidad) {
-
-            alert(
-                "No puede haber más preguntas por alumno que preguntas disponibles."
-            );
-
-            return;
-
-        }
-
-
-        const bloques =
-            document.querySelectorAll(
-                ".pregunta"
-            );
-
 
         if (bloques.length !== cantidad) {
-
             alert(
-                "Primero apretá 'Crear preguntas' para generar todas las preguntas."
+                "Primero apretá «Crear preguntas» para generar todos los campos."
             );
-
             return;
-
         }
 
-
         const preguntas = [];
+        let errorValidacion = "";
 
+        bloques.forEach((bloque, indice) => {
 
-        bloques.forEach((bloque) => {
+            const enunciado = bloque
+                .querySelector(".enunciado")
+                .value.trim();
 
-            const campos =
-                bloque.querySelectorAll("input");
-
-
-            const pregunta =
-                campos[0]
-                    .value
-                    .trim();
-
-
-            const opciones = [
-
-                campos[1]
-                    .value
-                    .trim(),
-
-                campos[2]
-                    .value
-                    .trim(),
-
-                campos[3]
-                    .value
-                    .trim(),
-
-                campos[4]
-                    .value
-                    .trim()
-
+            const camposOpciones = [
+                ...bloque.querySelectorAll(".opcion")
             ];
 
+            const opciones = camposOpciones.map(
+                campo => campo.value.trim()
+            );
 
-            const correcta =
-                Number(
-                    bloque
-                        .querySelector("select")
-                        .value
-                );
+            const correcta = Number(
+                bloque.querySelector(".correcta").value
+            );
 
+            if (!enunciado) {
+                errorValidacion =
+                    `Falta el enunciado de la pregunta ${indice + 1}.`;
+                return;
+            }
+
+            if (opciones.some(opcion => !opcion)) {
+                errorValidacion =
+                    `Completá las cuatro respuestas de la pregunta ${indice + 1}.`;
+                return;
+            }
 
             preguntas.push({
-
-                pregunta: pregunta,
-
+                pregunta: enunciado,
                 opciones: opciones,
-
                 correcta: correcta
-
             });
 
         });
 
-
-        // ========================================
-        // CREAR NUEVO EXAMEN
-        // ========================================
+        if (errorValidacion) {
+            alert(errorValidacion);
+            return;
+        }
 
         const examen = {
-
             id: generarID(),
-
             materia: materia,
 
-            cantidadPreguntas: cantidad,
-
+            // Número de preguntas que responderá cada alumno.
             preguntasPorAlumno: preguntasPorAlumno,
 
-            preguntas: preguntas
+            // Número total de preguntas disponibles.
+            cantidadPreguntas: cantidad,
 
+            preguntas: preguntas
         };
 
+        const boton = document.getElementById("botonCrear");
+        const resultadoDiv =
+            document.getElementById("resultadoCreacion");
 
-        console.log(
-            "Enviando examen:",
-            examen
-        );
-
-
-        // ========================================
-        // ENVIAR A GOOGLE APPS SCRIPT
-        // ========================================
+        boton.disabled = true;
+        boton.textContent = "Guardando...";
+        resultadoDiv.textContent = "";
 
         try {
 
-            const respuesta =
-                await fetch(
-                    URL_APPS_SCRIPT,
-                    {
-                        method: "POST",
+            const respuesta = await fetch(URL_APPS_SCRIPT, {
+                method: "POST",
+                body: JSON.stringify(examen)
+            });
 
-                        body: JSON.stringify(examen)
-                    }
-                );
+            const resultado = await respuesta.json();
 
-
-            const resultado =
-                await respuesta.json();
-
-
-            console.log(
-                "Respuesta de Apps Script:",
-                resultado
-            );
-
-
-            if (resultado.ok) {
-
-                alert(
-                    "¡Examen creado correctamente!\n\n" +
-                    "Materia: " +
-                    examen.materia +
-                    "\nPreguntas disponibles: " +
-                    examen.cantidadPreguntas +
-                    "\nPreguntas por alumno: " +
-                    examen.preguntasPorAlumno +
-                    "\nID: " +
-                    examen.id
-                );
-
-            } else {
-
-                alert(
-                    "Hubo un problema al guardar el examen."
-                );
-
+            if (!respuesta.ok || !resultado.ok) {
+                throw new Error("No se pudo guardar el examen.");
             }
 
+            const enlaceAlumno =
+                window.location.href.substring(
+                    0,
+                    window.location.href.lastIndexOf("/") + 1
+                ) +
+                "index.html?id=" +
+                encodeURIComponent(examen.id);
+
+            resultadoDiv.innerHTML = "";
+
+            const titulo = document.createElement("h2");
+            titulo.textContent = "¡Examen creado correctamente!";
+
+            const detalle = document.createElement("p");
+            detalle.textContent =
+                `Materia: ${materia}. ` +
+                `${cantidad} preguntas disponibles; ` +
+                `${preguntasPorAlumno} por alumno.`;
+
+            const id = document.createElement("p");
+            id.textContent = "ID del examen: " + examen.id;
+
+            const enlace = document.createElement("a");
+            enlace.href = enlaceAlumno;
+            enlace.textContent = "Abrir enlace del alumno";
+            enlace.target = "_blank";
+            enlace.rel = "noopener noreferrer";
+
+            const botonCopiar = document.createElement("button");
+            botonCopiar.type = "button";
+            botonCopiar.textContent = "Copiar enlace del alumno";
+
+            botonCopiar.onclick = async function () {
+                try {
+                    await navigator.clipboard.writeText(enlaceAlumno);
+                    alert("¡Enlace copiado!");
+                } catch (error) {
+                    prompt("Copiá este enlace:", enlaceAlumno);
+                }
+            };
+
+            resultadoDiv.append(
+                titulo,
+                detalle,
+                id,
+                document.createElement("br"),
+                enlace,
+                document.createElement("br"),
+                botonCopiar
+            );
 
         } catch (error) {
 
-            console.error(
-                "Error:",
-                error
-            );
-
+            console.error("Error al crear el examen:", error);
 
             alert(
-                "No se pudo conectar con el servidor."
+                "No se pudo confirmar la creación del examen. " +
+                "Revisá la implementación de Apps Script antes de volver a intentarlo."
             );
+
+        } finally {
+
+            boton.disabled = false;
+            boton.textContent = "Generar examen";
 
         }
 
     }
-
 </script>
 
 </body>
-
 </html>
