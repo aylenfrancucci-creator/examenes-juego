@@ -6,17 +6,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-```
-<title>Configurar examen</title>
+    <title>Configurar examen</title>
 
-<link rel="stylesheet" href="style.css">
-```
-
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-```
 <div id="configurador">
 
     <h1>⚙️ Configurar examen</h1>
@@ -29,7 +25,8 @@
         placeholder="Ej: Historia"
     >
 
-    <p>Cantidad de preguntas:</p>
+
+    <p>Preguntas disponibles:</p>
 
     <input
         type="number"
@@ -38,6 +35,16 @@
         max="50"
         value="10"
     >
+
+    <p>Preguntas por alumno:</p>
+
+    <input
+        type="number"
+        id="preguntasPorAlumno"
+        min="1"
+        value="5"
+    >
+
 
     <h2>Preguntas</h2>
 
@@ -87,6 +94,51 @@
                     .getElementById("cantidadPreguntas")
                     .value
             );
+
+
+        if (
+            !Number.isInteger(cantidad) ||
+            cantidad < 1 ||
+            cantidad > 50
+        ) {
+
+            alert(
+                "La cantidad de preguntas disponibles debe estar entre 1 y 50."
+            );
+
+            return;
+        }
+
+
+        const preguntasPorAlumno =
+            Number(
+                document
+                    .getElementById("preguntasPorAlumno")
+                    .value
+            );
+
+
+        if (
+            !Number.isInteger(preguntasPorAlumno) ||
+            preguntasPorAlumno < 1
+        ) {
+
+            alert(
+                "La cantidad de preguntas por alumno debe ser válida."
+            );
+
+            return;
+        }
+
+
+        if (preguntasPorAlumno > cantidad) {
+
+            alert(
+                "No puede haber más preguntas por alumno que preguntas disponibles."
+            );
+
+            return;
+        }
 
 
         const contenedor =
@@ -218,10 +270,58 @@
             );
 
 
+        const preguntasPorAlumno =
+            Number(
+                document
+                    .getElementById("preguntasPorAlumno")
+                    .value
+            );
+
+
         if (materia === "") {
 
             alert(
                 "Escribí el nombre de la materia."
+            );
+
+            return;
+
+        }
+
+
+        if (
+            !Number.isInteger(cantidad) ||
+            cantidad < 1 ||
+            cantidad > 50
+        ) {
+
+            alert(
+                "La cantidad de preguntas disponibles debe estar entre 1 y 50."
+            );
+
+            return;
+
+        }
+
+
+        if (
+            !Number.isInteger(preguntasPorAlumno) ||
+            preguntasPorAlumno < 1
+        ) {
+
+            alert(
+                "La cantidad de preguntas por alumno debe ser válida."
+            );
+
+            return;
+
+        }
+
+
+        if (preguntasPorAlumno > cantidad) {
+
+            alert(
+                "No puede haber más preguntas por alumno que preguntas disponibles."
             );
 
             return;
@@ -235,10 +335,10 @@
             );
 
 
-        if (bloques.length === 0) {
+        if (bloques.length !== cantidad) {
 
             alert(
-                "Primero apretá 'Crear preguntas'."
+                "Primero apretá 'Crear preguntas' para generar todas las preguntas."
             );
 
             return;
@@ -315,6 +415,8 @@
 
             cantidadPreguntas: cantidad,
 
+            preguntasPorAlumno: preguntasPorAlumno,
+
             preguntas: preguntas
 
         };
@@ -359,6 +461,10 @@
                     "¡Examen creado correctamente!\n\n" +
                     "Materia: " +
                     examen.materia +
+                    "\nPreguntas disponibles: " +
+                    examen.cantidadPreguntas +
+                    "\nPreguntas por alumno: " +
+                    examen.preguntasPorAlumno +
                     "\nID: " +
                     examen.id
                 );
@@ -389,7 +495,6 @@
     }
 
 </script>
-```
 
 </body>
 
