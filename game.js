@@ -1,340 +1,551 @@
 
-const URL_APPS_SCRIPT =
-    "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
-
-const parametros = new URLSearchParams(window.location.search);
-const idExamen = parametros.get("id");
+const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
 
 let configuracionExamen = null;
 let preguntasSeleccionadas = [];
 let preguntaActual = 0;
 let respuestasCorrectas = 0;
-
 let nombreAlumno = "";
 let cursoAlumno = "";
 let horaInicio = null;
 let examenTerminado = false;
 
-
-// ========================================
-// MEZCLAR ELEMENTOS ALEATORIAMENTE
-// ========================================
-
 function mezclarArray(array) {
-    const copia = [...array];
+  const copia = [...array];
 
-    for (let i = copia.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [copia[i], copia[j]] = [copia[j], copia[i]];
-    }
+  for (let i = copia.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copia[i], copia[j]] = [copia[j], copia[i]];
+  }
 
-    return copia;
+  return copia;
 }
 
+function cargarExamen() {
+  const parametros = new URLSearchParams(window.location.search);
+  const idExamen = parametros.get("id");
 
-// ========================================
-// CARGAR EXAMEN
-// ========================================
+  if (!idExamen) {
+    document.getElementById("nombreMateria").textContent =
+      "No se indicó qué examen querés realizar.";
+    return;
+  }
 
-async function cargarExamen() {
-    if (!idExamen) {
-        mostrarError("No se encontró el ID del examen.");
-        return;
-    }
-
-    try {
-        const respuesta = await fetch(
-            URL_APPS_SCRIPT + "?id=" + encodeURIComponent(idExamen)
-        );
-
-        const datos = await respuesta.json();
-
-        if (!respuesta.ok || !datos.ok || !datos.examen) {
-            mostrarError("No se encontró ese examen.");
-            return;
-        }
-
-        const examen = datos.examen;
-        const cantidadPorAlumno = Number(examen.preguntasPorAlumno);
-
-        if (
-            !Array.isArray(examen.preguntas) ||
-            !Number.isInteger(cantidadPorAlumno) ||
-            cantidadPorAlumno < 1 ||
-            cantidadPorAlumno > examen.preguntas.length
-        ) {
-            mostrarError("La configuración de las preguntas no es válida.");
-            return;
-        }
-
-        configuracionExamen = examen;
-
+  fetch(`${URL_APPS_SCRIPT}?id=${encodeURIComponent(idExamen)}`)
+    .then(respuesta => respuesta.json())
+    .then(datos => {
+      if (!datos.ok || !datos.examen) {
         document.getElementById("nombreMateria").textContent =
-            examen.materia || "Examen";
-
-        console.log("Preguntas disponibles:", examen.preguntas.length);
-        console.log("Preguntas por alumno:", cantidadPorAlumno);
-
-    } catch (error) {
-        console.error("Error cargando examen:", error);
-        mostrarError("No se pudo cargar el examen.");
-    }
-}
-
-
-// ========================================
-// MOSTRAR ERROR
-// ========================================
-
-function mostrarError(mensaje) {
-    const inicio = document.getElementById("pantallaInicio");
-
-    if (!inicio) {
-        alert(mensaje);
+          datos.error || "No se pudo encontrar el examen.";
         return;
-    }
+      }
 
-    let aviso = document.getElementById("errorExamen");
+      configuracionExamen = datos.examen;
 
-    if (!aviso) {
-        aviso = document.createElement("p");
-        aviso.id = "errorExamen";
-        inicio.prepend(aviso);
-    }
-
-    aviso.textContent = mensaje;
-    aviso.style.color = "#b42318";
+      document.getElementById("nombreMateria").textContent =
+        configuracionExamen.materia;
+    })
+    .catch(() => {
+      document.getElementById("nombreMateria").textContent =
+        "No se pudo cargar el examen. Probá nuevamente.";
+    });
 }
-
-
-// ========================================
-// COMENZAR EXAMEN
-// ========================================
 
 function comenzarExamen() {
-    if (!configuracionExamen) {
-        alert("El examen todavía se está cargando. Esperá un momento.");
-        return;
-    }
+  if (!configuracionExamen) {
+    alert("El examen todavía se está cargando. Esperá un momento.");
+    return;
+  }
 
-    nombreAlumno = document.getElementById("nombre").value.trim();
-    cursoAlumno = document.getElementById("curso").value.trim();
+  nombreAlumno = document.getElementById("nombre").value.trim();
+  cursoAlumno = document.getElementById("curso").value.trim();
 
-    if (!nombreAlumno) {
-        alert("Escribí tu nombre antes de comenzar.");
-        return;
-    }
+  if (!nombreAlumno || !cursoAlumno) {
+    alert("Completá tu nombre y tu curso antes de comenzar.");
+    return;
+  }
 
-    if (!cursoAlumno) {
-        alert("Escribí tu curso antes de comenzar.");
-        return;
-    }
+  const disponibles = configuracionExamen.preguntas;
+  const cantidad = configuracionExamen.preguntasPorAlumno;
 
-    const cantidad = Number(configuracionExamen.preguntasPorAlumno);
+  if (!Array.isArray(disponibles) || disponibles.length < cantidad) {
+    alert("Este examen no tiene suficientes preguntas disponibles.");
+    return;
+  }
 
-    preguntasSeleccionadas = mezclarArray(configuracionExamen.preguntas)
-        .slice(0, cantidad);
+  preguntasSeleccionadas = mezclarArray(disponibles).slice(0, cantidad);
+  preguntaActual = 0;
+  respuestasCorrectas = 0;
+  examenTerminado = false;
+  horaInicio = new Date();
 
-    if (preguntasSeleccionadas.length !== cantidad) {
-        alert("No se pudieron seleccionar las preguntas.");
-        return;
-    }
+  document.getElementById("pantallaInicio").style.display = "none";
+  document.getElementById("pantallaExamen").style.display = "block";
 
-    preguntaActual = 0;
-    respuestasCorrectas = 0;
-    examenTerminado = false;
-
-    horaInicio = new Date();
-
-    document.getElementById("pantallaInicio").style.display = "none";
-    document.getElementById("pantallaExamen").style.display = "block";
-
-    mostrarPregunta();
+  mostrarPregunta();
 }
-
-
-// ========================================
-// MOSTRAR PREGUNTA
-// ========================================
 
 function mostrarPregunta() {
-    if (preguntaActual >= preguntasSeleccionadas.length) {
-        terminarExamen();
-        return;
-    }
+  if (preguntaActual >= preguntasSeleccionadas.length) {
+    terminarExamen();
+    return;
+  }
 
-    const pregunta = preguntasSeleccionadas[preguntaActual];
+  const pregunta = preguntasSeleccionadas[preguntaActual];
 
-    document.getElementById("numeroPregunta").textContent =
-        `Pregunta ${preguntaActual + 1} de ${preguntasSeleccionadas.length}`;
+  document.getElementById("numeroPregunta").textContent =
+    `Pregunta ${preguntaActual + 1} de ${preguntasSeleccionadas.length}`;
 
-    document.getElementById("textoPregunta").textContent =
-        pregunta.pregunta;
+  document.getElementById("textoPregunta").textContent =
+    pregunta.enunciado;
 
-    const opciones = document.getElementById("opciones");
-    opciones.innerHTML = "";
+  const contenedor = document.getElementById("opciones");
+  contenedor.innerHTML = "";
 
-    const resultado = document.getElementById("resultado");
-    resultado.textContent = "";
-    resultado.className = "";
+  document.getElementById("resultado").textContent = "";
 
-    const respuestasMezcladas = mezclarArray(
-        pregunta.opciones.map((texto, indice) => ({
-            texto,
-            indiceOriginal: indice
-        }))
-    );
+  mezclarArray(pregunta.opciones).forEach(opcion => {
+    const boton = document.createElement("button");
 
-    respuestasMezcladas.forEach((opcion) => {
-        const boton = document.createElement("button");
+    boton.type = "button";
+    boton.className = "opcion";
+    boton.textContent = opcion;
 
-        boton.type = "button";
-        boton.className = "opcion";
-        boton.textContent = opcion.texto;
-
-        boton.addEventListener("click", () => {
-            comprobarRespuesta(opcion.indiceOriginal);
-        });
-
-        opciones.appendChild(boton);
-    });
-}
-
-
-// ========================================
-// COMPROBAR RESPUESTA
-// ========================================
-
-function comprobarRespuesta(respuestaElegida) {
-    if (examenTerminado) return;
-
-    const pregunta = preguntasSeleccionadas[preguntaActual];
-
-    const botones = document.querySelectorAll("#opciones .opcion");
-
-    // Impedir que el alumno responda más de una vez.
-    botones.forEach((boton) => {
-        boton.disabled = true;
+    boton.addEventListener("click", () => {
+      comprobarRespuesta(opcion, boton);
     });
 
-    const resultado = document.getElementById("resultado");
-
-    if (respuestaElegida === Number(pregunta.correcta)) {
-        respuestasCorrectas++;
-        resultado.textContent = "¡Correcto!";
-        resultado.className = "correcto";
-    } else {
-        resultado.textContent =
-            "Incorrecto. La respuesta correcta era: " +
-            pregunta.opciones[Number(pregunta.correcta)];
-
-        resultado.className = "incorrecto";
-    }
-
-    setTimeout(() => {
-        preguntaActual++;
-        mostrarPregunta();
-    }, 1200);
+    contenedor.appendChild(boton);
+  });
 }
 
+function comprobarRespuesta(respuesta, botonElegido) {
+  if (examenTerminado) return;
 
-// ========================================
-// TERMINAR Y GUARDAR RESULTADO
-// ========================================
+  const botones = document.querySelectorAll("#opciones .opcion");
+
+  if ([...botones].some(boton => boton.disabled)) return;
+
+  const pregunta = preguntasSeleccionadas[preguntaActual];
+  const resultado = document.getElementById("resultado");
+  const esCorrecta = respuesta === pregunta.correcta;
+
+  botones.forEach(boton => {
+    boton.disabled = true;
+
+    if (boton.textContent === pregunta.correcta) {
+      boton.classList.add("correcto");
+    }
+  });
+
+  if (esCorrecta) {
+    respuestasCorrectas++;
+    resultado.textContent = "¡Correcto! 🎉";
+    resultado.style.color = "#16a34a";
+  } else {
+    botonElegido.classList.add("incorrecto");
+    resultado.textContent =
+      `La respuesta correcta era: ${pregunta.correcta}`;
+    resultado.style.color = "#dc2626";
+  }
+
+  const continuar = document.createElement("button");
+  continuar.type = "button";
+  continuar.className = "opcion";
+  continuar.textContent =
+    preguntaActual === preguntasSeleccionadas.length - 1
+      ? "Ver mi resultado"
+      : "Siguiente pregunta →";
+
+  continuar.style.marginTop = "16px";
+  continuar.style.background = "#4f46e5";
+  continuar.style.color = "#ffffff";
+  continuar.style.border = "none";
+
+  continuar.addEventListener("click", () => {
+    preguntaActual++;
+    mostrarPregunta();
+  });
+
+  document.getElementById("opciones").appendChild(continuar);
+}
+
+function agregarEstilosResultado() {
+  if (document.getElementById("estilosResultadoAnimado")) return;
+
+  const estilos = document.createElement("style");
+  estilos.id = "estilosResultadoAnimado";
+
+  estilos.textContent = `
+    .resultado-final {
+      max-width: 620px;
+      margin: 24px auto;
+      padding: 32px 24px;
+      border-radius: 26px;
+      background: linear-gradient(145deg, #ffffff, #f1f5ff);
+      box-shadow: 0 18px 50px rgba(31, 41, 55, 0.12);
+      text-align: center;
+      color: #172033;
+      overflow: hidden;
+      animation: aparecerResultado 0.6s ease both;
+    }
+
+    .resultado-final .resultado-icono {
+      font-size: 52px;
+      margin-bottom: 10px;
+      animation: aparecerIcono 0.7s ease both;
+    }
+
+    .resultado-final .resultado-titulo {
+      font-size: clamp(27px, 5vw, 38px);
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin: 0 0 8px;
+    }
+
+    .resultado-final .resultado-subtitulo {
+      color: #64748b;
+      font-size: 16px;
+      margin-bottom: 26px;
+    }
+
+    .resultado-final .nota-grande {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 7px;
+      margin: 12px 0 20px;
+    }
+
+    .resultado-final .nota-numero {
+      font-size: clamp(62px, 13vw, 88px);
+      font-weight: 900;
+      letter-spacing: -5px;
+      line-height: 1;
+      background: linear-gradient(135deg, #4f46e5, #9333ea);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .resultado-final .nota-maxima {
+      font-size: 24px;
+      color: #94a3b8;
+      font-weight: 700;
+    }
+
+    .resultado-final .barra-fondo {
+      width: 100%;
+      height: 24px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      padding: 4px;
+      overflow: hidden;
+      box-sizing: border-box;
+      margin: 0 auto 12px;
+    }
+
+    .resultado-final .barra-progreso {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #6366f1, #a855f7);
+      transition: width 1.8s cubic-bezier(.22, 1, .36, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .resultado-final .barra-progreso::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        110deg,
+        transparent 20%,
+        rgba(255,255,255,.45) 45%,
+        transparent 70%
+      );
+      transform: translateX(-100%);
+      animation: brilloBarra 1.5s ease-in-out 0.5s infinite;
+    }
+
+    .resultado-final .porcentaje-texto {
+      font-size: 14px;
+      font-weight: 700;
+      color: #64748b;
+      margin-bottom: 25px;
+    }
+
+    .resultado-final .tarjetas-datos {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .resultado-final .dato-tarjeta {
+      padding: 17px 12px;
+      border-radius: 16px;
+      background: #ffffff;
+      border: 1px solid #e8edf5;
+    }
+
+    .resultado-final .dato-etiqueta {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 7px;
+    }
+
+    .resultado-final .dato-valor {
+      font-size: 19px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .resultado-final .mensaje-final {
+      font-size: 17px;
+      font-weight: 700;
+      margin-top: 23px;
+    }
+
+    .resultado-final .guardado-final {
+      font-size: 13px;
+      color: #64748b;
+      margin-top: 20px;
+      min-height: 18px;
+    }
+
+    @keyframes aparecerResultado {
+      from { opacity: 0; transform: translateY(18px) scale(.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes aparecerIcono {
+      0% { opacity: 0; transform: scale(.5) rotate(-12deg); }
+      70% { transform: scale(1.15) rotate(4deg); }
+      100% { opacity: 1; transform: scale(1) rotate(0); }
+    }
+
+    @keyframes brilloBarra {
+      to { transform: translateX(150%); }
+    }
+
+    @media (max-width: 480px) {
+      .resultado-final { padding: 27px 17px; }
+      .resultado-final .tarjetas-datos { gap: 8px; }
+      .resultado-final .dato-tarjeta { padding: 14px 8px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .resultado-final,
+      .resultado-final .resultado-icono {
+        animation: none;
+      }
+
+      .resultado-final .barra-progreso {
+        transition: none;
+      }
+
+      .resultado-final .barra-progreso::after {
+        animation: none;
+      }
+    }
+  `;
+
+  document.head.appendChild(estilos);
+}
+
+function obtenerMensajeNota(nota) {
+  if (nota >= 10) {
+    return {
+      icono: "🏆",
+      titulo: "¡Perfecto!",
+      mensaje: "¡Un examen impecable! Te luciste."
+    };
+  }
+
+  if (nota >= 8) {
+    return {
+      icono: "🎉",
+      titulo: "¡Excelente trabajo!",
+      mensaje: "¡La rompiste! Seguí así."
+    };
+  }
+
+  if (nota >= 6) {
+    return {
+      icono: "🌟",
+      titulo: "¡Buen trabajo!",
+      mensaje: "¡Vas por buen camino!"
+    };
+  }
+
+  if (nota >= 4) {
+    return {
+      icono: "💪",
+      titulo: "¡A seguir practicando!",
+      mensaje: "Cada intento sirve para aprender."
+    };
+  }
+
+  return {
+    icono: "📚",
+    titulo: "¡A no rendirse!",
+    mensaje: "Repasar y volver a intentarlo ayuda un montón."
+  };
+}
 
 async function terminarExamen() {
-    if (examenTerminado) return;
+  if (examenTerminado) return;
+  examenTerminado = true;
 
-    examenTerminado = true;
+  const total = preguntasSeleccionadas.length;
+  const nota = Math.round((respuestasCorrectas / total) * 100) / 10;
+  const porcentaje = Math.round((respuestasCorrectas / total) * 100);
+  const tiempoTotal = calcularTiempoTotal();
 
-    const pantalla = document.getElementById("pantallaExamen");
-    const total = preguntasSeleccionadas.length;
+  const mensaje = obtenerMensajeNota(nota);
 
-    const nota = Math.round(
-        (respuestasCorrectas / total) * 100
-    ) / 10;
+  agregarEstilosResultado();
 
-    const horaFin = new Date();
+  const pantalla = document.getElementById("pantallaExamen");
 
-    const duracionMilisegundos =
-        horaFin.getTime() - horaInicio.getTime();
+  pantalla.innerHTML = `
+    <section class="resultado-final">
+      <div class="resultado-icono">${mensaje.icono}</div>
 
-    const duracionSegundos = Math.max(
-        0,
-        Math.floor(duracionMilisegundos / 1000)
-    );
+      <h1 class="resultado-titulo">${mensaje.titulo}</h1>
 
-    const minutos = Math.floor(duracionSegundos / 60);
-    const segundos = duracionSegundos % 60;
+      <p class="resultado-subtitulo">
+        Examen de ${escaparHTML(configuracionExamen.materia)}
+      </p>
 
-    const tiempoTotal =
-        `${minutos} min ${segundos} seg`;
+      <div class="nota-grande">
+        <span class="nota-numero" id="notaAnimada">0.0</span>
+        <span class="nota-maxima">/ 10</span>
+      </div>
 
-    const horaInicioTexto = horaInicio.toLocaleString("es-AR");
+      <div class="barra-fondo" role="progressbar"
+           aria-label="Nota del examen"
+           aria-valuemin="0" aria-valuemax="10"
+           aria-valuenow="${nota}">
+        <div class="barra-progreso" id="barraNota"></div>
+      </div>
 
-    pantalla.innerHTML = `
-        <h2>¡Examen terminado!</h2>
-        <p>Alumno: ${escaparHTML(nombreAlumno)}</p>
-        <p>Respuestas correctas: ${respuestasCorrectas} de ${total}</p>
-        <p>Nota: ${nota.toFixed(1)}</p>
-        <p>Tiempo total: ${tiempoTotal}</p>
-        <p id="estadoGuardado">Guardando resultado...</p>
-    `;
+      <div class="porcentaje-texto">${porcentaje}% del puntaje</div>
 
-    try {
-        const respuesta = await fetch(URL_APPS_SCRIPT, {
-            method: "POST",
-            body: JSON.stringify({
-                accion: "guardarResultado",
-                idExamen: idExamen,
-                alumno: nombreAlumno,
-                nota: nota,
-                aciertos: `${respuestasCorrectas}/${total}`,
-                horaInicio: horaInicioTexto,
-                tiempoTotal: tiempoTotal
-            })
-        });
+      <div class="tarjetas-datos">
+        <div class="dato-tarjeta">
+          <div class="dato-etiqueta">RESPUESTAS CORRECTAS</div>
+          <div class="dato-valor">${respuestasCorrectas} de ${total}</div>
+        </div>
 
-        const datos = await respuesta.json();
+        <div class="dato-tarjeta">
+          <div class="dato-etiqueta">TIEMPO TOTAL</div>
+          <div class="dato-valor">${escaparHTML(tiempoTotal)}</div>
+        </div>
+      </div>
 
-        const estado = document.getElementById("estadoGuardado");
+      <div class="mensaje-final">${mensaje.mensaje}</div>
 
-        if (!respuesta.ok || !datos.ok) {
-            throw new Error(datos.error || "No se pudo guardar el resultado.");
+      <div class="guardado-final" id="estadoGuardado">
+        Guardando tu resultado...
+      </div>
+    </section>
+  `;
+
+  // Animación de la barra y de la nota.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const barra = document.getElementById("barraNota");
+      const numero = document.getElementById("notaAnimada");
+
+      if (barra) barra.style.width = `${porcentaje}%`;
+
+      if (numero) {
+        const duracion = 1800;
+        const inicio = performance.now();
+
+        function animarNota(ahora) {
+          const progreso = Math.min((ahora - inicio) / duracion, 1);
+          const suave = 1 - Math.pow(1 - progreso, 4);
+          numero.textContent = (nota * suave).toFixed(1);
+
+          if (progreso < 1) {
+            requestAnimationFrame(animarNota);
+          } else {
+            numero.textContent = nota.toFixed(1);
+          }
         }
 
-        estado.textContent = "✅ Resultado guardado correctamente.";
+        requestAnimationFrame(animarNota);
+      }
+    });
+  });
 
-    } catch (error) {
-        console.error("Error guardando resultado:", error);
+  // Guardar el resultado en la hoja de Google Sheets.
+  const parametros = new URLSearchParams(window.location.search);
+  const idExamen = parametros.get("id");
 
-        const estado = document.getElementById("estadoGuardado");
+  try {
+    const respuesta = await fetch(URL_APPS_SCRIPT, {
+      method: "POST",
+      body: JSON.stringify({
+        accion: "guardarResultado",
+        idExamen: idExamen,
+        alumno: nombreAlumno,
+        nota: nota,
+        aciertos: `${respuestasCorrectas}/${total}`,
+        horaInicio: horaInicio.toLocaleString("es-AR"),
+        tiempoTotal: tiempoTotal
+      })
+    });
 
-        if (estado) {
-            estado.textContent =
-                "⚠️ No se pudo confirmar el guardado. Avisale a la profesora.";
-        }
+    const datos = await respuesta.json();
+    const estado = document.getElementById("estadoGuardado");
+
+    if (estado) {
+      estado.textContent = datos.ok
+        ? "✓ Resultado guardado correctamente"
+        : "No se pudo confirmar el guardado del resultado.";
+
+      estado.style.color = datos.ok ? "#15803d" : "#b91c1c";
     }
+  } catch (error) {
+    const estado = document.getElementById("estadoGuardado");
+
+    if (estado) {
+      estado.textContent =
+        "No se pudo confirmar el guardado. Avisale a tu profesor.";
+      estado.style.color = "#b91c1c";
+    }
+
+    console.error("Error al guardar el resultado:", error);
+  }
 }
 
+function calcularTiempoTotal() {
+  if (!horaInicio) return "0 min 0 seg";
 
-// ========================================
-// EVITAR QUE EL NOMBRE ROMPA EL HTML
-// ========================================
+  const segundos = Math.max(
+    0,
+    Math.floor((new Date() - horaInicio) / 1000)
+  );
+
+  const minutos = Math.floor(segundos / 60);
+  const restoSegundos = segundos % 60;
+
+  return `${minutos} min ${restoSegundos} seg`;
+}
 
 function escaparHTML(texto) {
-    return String(texto).replace(/[&<>"']/g, caracter => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;"
-    })[caracter]);
+  return String(texto ?? "").replace(/[&<>"']/g, caracter => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[caracter]);
 }
-
-
-// ========================================
-// CARGAR EXAMEN AL ABRIR LA PÁGINA
-// ========================================
 
 cargarExamen();
