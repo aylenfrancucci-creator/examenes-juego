@@ -50,6 +50,12 @@
 
     #configurador button {
       margin: 8px 4px 8px 0;
+      cursor: pointer;
+    }
+
+    #configurador button:disabled {
+      opacity: .6;
+      cursor: wait;
     }
 
     .ayuda {
@@ -138,11 +144,6 @@
       font-weight: bold;
     }
 
-    .boton-secundario {
-      background: #eee5ef;
-      color: #54334f;
-    }
-
     @media (max-width: 600px) {
       #configurador {
         padding: 18px 14px;
@@ -180,29 +181,34 @@
     <h2>📝 Pegá todas tus preguntas</h2>
 
     <p class="ayuda">
-      Usá preguntas numeradas y opciones A), B), C) y D).
-      Podés pegar todas juntas desde un documento.
+      Numerá las preguntas y escribí las opciones con A), B), C) y D).
+      Para marcar la respuesta correcta, poné un asterisco antes de la
+      letra o alrededor del texto de la opción.
     </p>
 
     <textarea
       id="textoPreguntas"
-      placeholder="1. Escribí tu pregunta...
-A) Primera opción
-B) Segunda opción
-C) Tercera opción
-D) Cuarta opción
+      placeholder="1. ¿Cuál es la capital de Argentina?
+A) Córdoba
+*B) Buenos Aires
+C) Rosario
+D) Mendoza
 
-2. Escribí otra pregunta...
-A) Primera opción
-B) Segunda opción
-C) Tercera opción
-D) Cuarta opción"
+2. ¿Cuánto es 5 × 3?
+A) 8
+B) 10
+C) *15
+D) 20"
     ></textarea>
 
     <div class="aviso">
-      <strong>Importante:</strong> después de separar las preguntas,
-      vas a tener que marcar la respuesta correcta de cada una.
-      La página no la adivina.
+      <strong>Ejemplos válidos:</strong><br>
+      <code>*B) Buenos Aires</code><br>
+      <code>B) *Buenos Aires</code><br>
+      <code>B) Buenos Aires *</code><br><br>
+      Si una pregunta tiene una sola opción marcada, se seleccionará
+      automáticamente. Si no tiene ninguna, podrás marcarla manualmente.
+      No marques dos opciones como correctas en la misma pregunta.
     </div>
 
     <div class="centrado">
@@ -219,8 +225,8 @@ D) Cuarta opción"
     <section id="zonaRevision" hidden>
       <h2>✅ Revisá tus preguntas</h2>
       <p class="ayuda">
-        Podés corregir los textos y las opciones. En cada pregunta,
-        seleccioná el círculo al lado de la respuesta correcta.
+        Revisá los enunciados y las opciones. Las respuestas marcadas con
+        asterisco ya estarán seleccionadas, pero podés cambiar cualquiera.
       </p>
 
       <p id="contadorPreguntas"></p>
@@ -242,7 +248,6 @@ D) Cuarta opción"
   </main>
 
   <script>
-    // Se conserva la dirección del servicio usado por la página publicada.
     const URL_APPS_SCRIPT =
       "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
 
@@ -263,6 +268,7 @@ D) Cuarta opción"
       const resultado = document.getElementById("resultadoCreacion");
 
       resultado.textContent = "";
+      document.getElementById("zonaRevision").hidden = true;
 
       if (!texto) {
         alert("Primero pegá tus preguntas en el cuadro.");
@@ -275,11 +281,11 @@ D) Cuarta opción"
       let opcionActual = -1;
 
       function guardarActual() {
-        if (actual) {
-          actual.enunciado = actual.enunciado.trim();
-          actual.opciones = actual.opciones.map(opcion => opcion.trim());
-          preguntas.push(actual);
-        }
+        if (!actual) return;
+
+        actual.enunciado = actual.enunciado.trim();
+        actual.opciones = actual.opciones.map(opcion => opcion.trim());
+        preguntas.push(actual);
       }
 
       for (const lineaOriginal of lineas) {
@@ -287,7 +293,6 @@ D) Cuarta opción"
 
         if (!linea) continue;
 
-        // Detecta encabezados como "1. Pregunta" o "Pregunta 1: ..."
         const inicioPregunta = linea.match(
           /^(?:(?:pregunta\s*)?\d+\s*[.)\-:]|pregunta\s+\d+\s*[:.)\-])\s*(.*)$/i
         );
@@ -297,16 +302,17 @@ D) Cuarta opción"
 
           actual = {
             enunciado: inicioPregunta[1].trim(),
-            opciones: []
+            opciones: [],
+            correctasMarcadas: []
           };
 
           opcionActual = -1;
           continue;
         }
 
-        // Detecta opciones como A), B), C), D), A. o A:
+        // Acepta tanto "B) Texto" como "*B) Texto".
         const inicioOpcion = linea.match(
-          /^([A-F])\s*[).:\-]\s*(.+)$/i
+          /^(\*)?\s*([A-F])\s*[).:\-]\s*(.+)$/i
         );
 
         if (inicioOpcion) {
@@ -317,31 +323,48 @@ D) Cuarta opción"
             return;
           }
 
-          const letra = inicioOpcion[1].toUpperCase();
+          const letra = inicioOpcion[2].toUpperCase();
           const indice = letra.charCodeAt(0) - 65;
 
-          // Evita aceptar letras salteadas como A), C), D).
           if (indice !== actual.opciones.length || indice > 5) {
             resultado.textContent =
-              "Las opciones de una pregunta deben estar ordenadas " +
-              "desde A), por ejemplo A), B), C) y D).";
+              "Las opciones de cada pregunta deben estar ordenadas " +
+              "desde A): A), B), C), D), etc.";
             return;
           }
 
-          actual.opciones.push(inicioOpcion[2].trim());
-          opcionActual = actual.opciones.length - 1;
+          let textoOpcion = inicioOpcion[3].trim();
+          let marcada = Boolean(inicioOpcion[1]);
+
+          // También acepta "B) *Buenos Aires".
+          if (/^\*\s*/.test(textoOpcion)) {
+            marcada = true;
+            textoOpcion = textoOpcion.replace(/^\*\s*/, "");
+          }
+
+          // También acepta "B) Buenos Aires *".
+          if (/\s*\*$/.test(textoOpcion)) {
+            marcada = true;
+            textoOpcion = textoOpcion.replace(/\s*\*$/, "").trim();
+          }
+
+          actual.opciones.push(textoOpcion);
+
+          if (marcada) {
+            actual.correctasMarcadas.push(indice);
+          }
+
+          opcionActual = indice;
           continue;
         }
 
         if (!actual) {
           resultado.textContent =
             "No pude reconocer el inicio de una pregunta. " +
-            "Numerá las preguntas, por ejemplo: 1. ¿Qué es...?";
+            "Numeralas, por ejemplo: 1. ¿Qué es...?";
           return;
         }
 
-        // Si una línea continúa una opción, la agrega a esa opción.
-        // Si todavía no hay opciones, continúa el enunciado.
         if (opcionActual >= 0) {
           actual.opciones[opcionActual] += " " + linea;
         } else {
@@ -384,9 +407,22 @@ D) Cuarta opción"
             `Hay una opción vacía en la pregunta ${i + 1}.`;
           return;
         }
+
+        if (pregunta.correctasMarcadas.length > 1) {
+          resultado.textContent =
+            `La pregunta ${i + 1} tiene más de una respuesta marcada ` +
+            "con asterisco. Dejá solo una opción con asterisco y volvé a separar.";
+          return;
+        }
+
+        pregunta.correctaIndice =
+          pregunta.correctasMarcadas.length === 1
+            ? pregunta.correctasMarcadas[0]
+            : null;
       }
 
       preguntasPreparadas = preguntas;
+
       document.getElementById("preguntasPorAlumno").max = preguntas.length;
 
       if (
@@ -399,8 +435,13 @@ D) Cuarta opción"
 
       renderizarPreguntas();
 
+      const marcadas = preguntas.filter(
+        pregunta => pregunta.correctaIndice !== null
+      ).length;
+
       document.getElementById("contadorPreguntas").textContent =
-        `${preguntas.length} preguntas detectadas.`;
+        `${preguntas.length} preguntas detectadas. ` +
+        `${marcadas} con respuesta correcta marcada automáticamente.`;
 
       document.getElementById("zonaRevision").hidden = false;
       document.getElementById("zonaRevision").scrollIntoView({
@@ -420,22 +461,21 @@ D) Cuarta opción"
         let contenido = `
           <h3>Pregunta ${indice + 1}</h3>
           <label class="campo" for="enunciado-${indice}">Enunciado:</label>
-          <textarea
-            id="enunciado-${indice}"
-            class="enunciado"
-          >${escaparHTML(pregunta.enunciado)}</textarea>
-
+          <textarea id="enunciado-${indice}" class="enunciado">${escaparHTML(pregunta.enunciado)}</textarea>
           <p><strong>Elegí la respuesta correcta:</strong></p>
         `;
 
         pregunta.opciones.forEach((opcion, indiceOpcion) => {
+          const seleccionada = pregunta.correctaIndice === indiceOpcion;
+
           contenido += `
-            <label class="opcion-editor" data-opcion="${indiceOpcion}">
+            <label class="opcion-editor ${seleccionada ? "seleccionada" : ""}">
               <input
                 type="radio"
                 name="correcta-${indice}"
                 value="${indiceOpcion}"
                 aria-label="Marcar opción ${String.fromCharCode(65 + indiceOpcion)} como correcta"
+                ${seleccionada ? "checked" : ""}
               >
               <span>${String.fromCharCode(65 + indiceOpcion)})</span>
               <input
@@ -444,7 +484,7 @@ D) Cuarta opción"
                 value="${escaparHTML(opcion)}"
                 aria-label="Texto de la opción ${String.fromCharCode(65 + indiceOpcion)}"
               >
-              <span class="texto-correcta" hidden>✓ Correcta</span>
+              <span class="texto-correcta" ${seleccionada ? "" : "hidden"}>✓ Correcta</span>
             </label>
           `;
         });
@@ -523,7 +563,11 @@ D) Cuarta opción"
         }
 
         if (indiceCorrecta < 0) {
-          alert(`Todavía no marcaste la respuesta correcta de la pregunta ${i + 1}.`);
+          alert(
+            `La pregunta ${i + 1} no tiene respuesta correcta marcada. ` +
+            "Marcala con el botón antes de generar el examen."
+          );
+          tarjeta.scrollIntoView({ behavior: "smooth", block: "center" });
           return;
         }
 
@@ -544,7 +588,8 @@ D) Cuarta opción"
 
       boton.disabled = true;
       boton.textContent = "Guardando examen...";
-      resultadoDiv.textContent = "Estamos guardando tu examen. Esperá un momento.";
+      resultadoDiv.textContent =
+        "Estamos guardando tu examen. Esperá un momento.";
 
       try {
         const respuesta = await fetch(URL_APPS_SCRIPT, {
@@ -594,6 +639,7 @@ D) Cuarta opción"
         const copiar = document.createElement("button");
         copiar.type = "button";
         copiar.textContent = "📋 Copiar enlace";
+
         copiar.addEventListener("click", async () => {
           try {
             await navigator.clipboard.writeText(enlaceAlumno);
