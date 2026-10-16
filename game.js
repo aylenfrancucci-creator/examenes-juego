@@ -1,3 +1,4 @@
+
 const URL_APPS_SCRIPT =
     "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
 
@@ -8,12 +9,15 @@ let configuracionExamen = null;
 let preguntasSeleccionadas = [];
 let preguntaActual = 0;
 let respuestasCorrectas = 0;
+
 let nombreAlumno = "";
 let cursoAlumno = "";
+let horaInicio = null;
+let examenTerminado = false;
 
 
 // ========================================
-// MEZCLAR ELEMENTOS AL AZAR
+// MEZCLAR ELEMENTOS ALEATORIAMENTE
 // ========================================
 
 function mezclarArray(array) {
@@ -29,12 +33,12 @@ function mezclarArray(array) {
 
 
 // ========================================
-// CARGAR CONFIGURACIÓN DEL EXAMEN
+// CARGAR EXAMEN
 // ========================================
 
 async function cargarExamen() {
     if (!idExamen) {
-        mostrarError("No se encontró el ID del examen en el enlace.");
+        mostrarError("No se encontró el ID del examen.");
         return;
     }
 
@@ -45,54 +49,22 @@ async function cargarExamen() {
 
         const datos = await respuesta.json();
 
-        console.log("Datos recibidos de Apps Script:", datos);
-
         if (!respuesta.ok || !datos.ok || !datos.examen) {
-            mostrarError("No se encontró el examen. Revisá el enlace.");
+            mostrarError("No se encontró ese examen.");
             return;
         }
 
         const examen = datos.examen;
-
-        if (!Array.isArray(examen.preguntas)) {
-            mostrarError(
-                "El servidor no devolvió correctamente las preguntas. " +
-                "Revisá la implementación de Apps Script."
-            );
-            return;
-        }
-
-        const disponibles = Number(examen.cantidadPreguntas);
-        const porAlumno = Number(examen.preguntasPorAlumno);
-
-        // No confundir las preguntas disponibles con las que responde cada alumno.
-        if (
-            !Number.isInteger(porAlumno) ||
-            porAlumno < 1 ||
-            porAlumno > examen.preguntas.length
-        ) {
-            mostrarError(
-                "No se pudo confirmar la cantidad de preguntas por alumno. " +
-                "El servidor debe devolver preguntasPorAlumno y cantidadPreguntas " +
-                "por separado. Revisá la versión implementada de Código.gs."
-            );
-
-            console.error("Configuración recibida:", {
-                cantidadPreguntas: examen.cantidadPreguntas,
-                preguntasPorAlumno: examen.preguntasPorAlumno,
-                preguntasRecibidas: examen.preguntas.length
-            });
-
-            return;
-        }
+        const cantidadPorAlumno = Number(examen.preguntasPorAlumno);
 
         if (
-            !Number.isInteger(disponibles) ||
-            disponibles !== examen.preguntas.length
+            !Array.isArray(examen.preguntas) ||
+            !Number.isInteger(cantidadPorAlumno) ||
+            cantidadPorAlumno < 1 ||
+            cantidadPorAlumno > examen.preguntas.length
         ) {
-            console.warn(
-                "La cantidad disponible guardada no coincide con el array recibido."
-            );
+            mostrarError("La configuración de las preguntas no es válida.");
+            return;
         }
 
         configuracionExamen = examen;
@@ -101,13 +73,11 @@ async function cargarExamen() {
             examen.materia || "Examen";
 
         console.log("Preguntas disponibles:", examen.preguntas.length);
-        console.log("Preguntas que debe responder el alumno:", porAlumno);
+        console.log("Preguntas por alumno:", cantidadPorAlumno);
 
     } catch (error) {
         console.error("Error cargando examen:", error);
-        mostrarError(
-            "No se pudo cargar el examen. Revisá tu conexión y Apps Script."
-        );
+        mostrarError("No se pudo cargar el examen.");
     }
 }
 
@@ -119,26 +89,21 @@ async function cargarExamen() {
 function mostrarError(mensaje) {
     const inicio = document.getElementById("pantallaInicio");
 
-    if (inicio) {
-        inicio.style.display = "block";
-
-        let aviso = document.getElementById("errorExamen");
-
-        if (!aviso) {
-            aviso = document.createElement("p");
-            aviso.id = "errorExamen";
-            inicio.prepend(aviso);
-        }
-
-        aviso.textContent = mensaje;
-        aviso.style.color = "#b42318";
+    if (!inicio) {
+        alert(mensaje);
+        return;
     }
 
-    const pantalla = document.getElementById("pantallaExamen");
+    let aviso = document.getElementById("errorExamen");
 
-    if (pantalla) {
-        pantalla.style.display = "none";
+    if (!aviso) {
+        aviso = document.createElement("p");
+        aviso.id = "errorExamen";
+        inicio.prepend(aviso);
     }
+
+    aviso.textContent = mensaje;
+    aviso.style.color = "#b42318";
 }
 
 
@@ -148,7 +113,7 @@ function mostrarError(mensaje) {
 
 function comenzarExamen() {
     if (!configuracionExamen) {
-        alert("El examen todavía no está listo. Esperá un momento.");
+        alert("El examen todavía se está cargando. Esperá un momento.");
         return;
     }
 
@@ -167,17 +132,19 @@ function comenzarExamen() {
 
     const cantidad = Number(configuracionExamen.preguntasPorAlumno);
 
-    // Seleccionar únicamente la cantidad configurada para cada alumno.
     preguntasSeleccionadas = mezclarArray(configuracionExamen.preguntas)
         .slice(0, cantidad);
 
     if (preguntasSeleccionadas.length !== cantidad) {
-        mostrarError("No se pudo seleccionar la cantidad correcta de preguntas.");
+        alert("No se pudieron seleccionar las preguntas.");
         return;
     }
 
     preguntaActual = 0;
     respuestasCorrectas = 0;
+    examenTerminado = false;
+
+    horaInicio = new Date();
 
     document.getElementById("pantallaInicio").style.display = "none";
     document.getElementById("pantallaExamen").style.display = "block";
@@ -207,16 +174,18 @@ function mostrarPregunta() {
     const opciones = document.getElementById("opciones");
     opciones.innerHTML = "";
 
-    document.getElementById("resultado").textContent = "";
+    const resultado = document.getElementById("resultado");
+    resultado.textContent = "";
+    resultado.className = "";
 
-    const respuestas = mezclarArray(
+    const respuestasMezcladas = mezclarArray(
         pregunta.opciones.map((texto, indice) => ({
             texto,
             indiceOriginal: indice
         }))
     );
 
-    respuestas.forEach((opcion) => {
+    respuestasMezcladas.forEach((opcion) => {
         const boton = document.createElement("button");
 
         boton.type = "button";
@@ -237,9 +206,13 @@ function mostrarPregunta() {
 // ========================================
 
 function comprobarRespuesta(respuestaElegida) {
+    if (examenTerminado) return;
+
     const pregunta = preguntasSeleccionadas[preguntaActual];
+
     const botones = document.querySelectorAll("#opciones .opcion");
 
+    // Impedir que el alumno responda más de una vez.
     botones.forEach((boton) => {
         boton.disabled = true;
     });
@@ -266,28 +239,102 @@ function comprobarRespuesta(respuestaElegida) {
 
 
 // ========================================
-// TERMINAR EXAMEN
+// TERMINAR Y GUARDAR RESULTADO
 // ========================================
 
-function terminarExamen() {
+async function terminarExamen() {
+    if (examenTerminado) return;
+
+    examenTerminado = true;
+
     const pantalla = document.getElementById("pantallaExamen");
     const total = preguntasSeleccionadas.length;
 
-    pantalla.innerHTML = "";
+    const nota = Math.round(
+        (respuestasCorrectas / total) * 100
+    ) / 10;
 
-    const titulo = document.createElement("h2");
-    titulo.textContent = "¡Examen terminado!";
+    const horaFin = new Date();
 
-    const resumen = document.createElement("p");
-    resumen.textContent =
-        `Respondiste correctamente ${respuestasCorrectas} de ${total} preguntas.`;
+    const duracionMilisegundos =
+        horaFin.getTime() - horaInicio.getTime();
 
-    pantalla.append(titulo, resumen);
+    const duracionSegundos = Math.max(
+        0,
+        Math.floor(duracionMilisegundos / 1000)
+    );
+
+    const minutos = Math.floor(duracionSegundos / 60);
+    const segundos = duracionSegundos % 60;
+
+    const tiempoTotal =
+        `${minutos} min ${segundos} seg`;
+
+    const horaInicioTexto = horaInicio.toLocaleString("es-AR");
+
+    pantalla.innerHTML = `
+        <h2>¡Examen terminado!</h2>
+        <p>Alumno: ${escaparHTML(nombreAlumno)}</p>
+        <p>Respuestas correctas: ${respuestasCorrectas} de ${total}</p>
+        <p>Nota: ${nota.toFixed(1)}</p>
+        <p>Tiempo total: ${tiempoTotal}</p>
+        <p id="estadoGuardado">Guardando resultado...</p>
+    `;
+
+    try {
+        const respuesta = await fetch(URL_APPS_SCRIPT, {
+            method: "POST",
+            body: JSON.stringify({
+                accion: "guardarResultado",
+                idExamen: idExamen,
+                alumno: nombreAlumno,
+                nota: nota,
+                aciertos: `${respuestasCorrectas}/${total}`,
+                horaInicio: horaInicioTexto,
+                tiempoTotal: tiempoTotal
+            })
+        });
+
+        const datos = await respuesta.json();
+
+        const estado = document.getElementById("estadoGuardado");
+
+        if (!respuesta.ok || !datos.ok) {
+            throw new Error(datos.error || "No se pudo guardar el resultado.");
+        }
+
+        estado.textContent = "✅ Resultado guardado correctamente.";
+
+    } catch (error) {
+        console.error("Error guardando resultado:", error);
+
+        const estado = document.getElementById("estadoGuardado");
+
+        if (estado) {
+            estado.textContent =
+                "⚠️ No se pudo confirmar el guardado. Avisale a la profesora.";
+        }
+    }
 }
 
 
 // ========================================
-// INICIAR CARGA
+// EVITAR QUE EL NOMBRE ROMPA EL HTML
+// ========================================
+
+function escaparHTML(texto) {
+    return String(texto).replace(/[&<>"']/g, caracter => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+    })[caracter]);
+}
+
+
+// ========================================
+// CARGAR EXAMEN AL ABRIR LA PÁGINA
 // ========================================
 
 cargarExamen();
