@@ -351,7 +351,9 @@
   <main id="configurador">
 
     <h1>⚙️ Crear examen</h1>
-
+<div class="centrado">
+  <button type="button" onclick="nuevoExamen()">➕ Nuevo examen</button>
+</div>
     <label class="campo" for="materia">Materia:</label>
     <input id="materia" type="text" placeholder="Ej: Historia">
 
@@ -1837,7 +1839,18 @@ D) 20"
           );
 
         }
-
+const botonNuevo =
+  document.createElement("button");
+botonNuevo.type = "button";
+botonNuevo.textContent = "➕ Crear otro examen";
+botonNuevo.addEventListener(
+  "click",
+  () => nuevoExamen(false)
+);
+resultadoDiv.append(
+  document.createElement("br"),
+  botonNuevo
+);
         resultadoDiv.scrollIntoView({
           behavior: "smooth"
         });
@@ -1863,7 +1876,53 @@ D) 20"
       }
 
     }
+/* ==================================================
+   NUEVO EXAMEN
+================================================== */
+function nuevoExamen(pedirConfirmacion = true) {
+  const hayTrabajo =
+    document.getElementById("materia").value.trim() ||
+    document.getElementById("textoPreguntas").value.trim() ||
+    preguntasPreparadas.length;
 
+  if (
+    pedirConfirmacion &&
+    hayTrabajo &&
+    !confirm(
+      "¿Empezar un examen nuevo? Se van a borrar los campos " +
+      "de esta pantalla. Los exámenes ya creados no se borran."
+    )
+  ) {
+    return;
+  }
+
+  // Campos
+  document.getElementById("materia").value = "";
+  document.getElementById("textoPreguntas").value = "";
+  const porAlumno =
+    document.getElementById("preguntasPorAlumno");
+  porAlumno.max = 50;
+  porAlumno.value = 5;
+
+  // Preguntas separadas
+  preguntasPreparadas = [];
+  document.getElementById("preguntas").innerHTML = "";
+  document.getElementById("contadorPreguntas").textContent = "";
+  document.getElementById("zonaRevision").hidden = true;
+
+  // Resultado anterior y botón de generar
+  document.getElementById("resultadoCreacion").innerHTML = "";
+  const botonCrear = document.getElementById("botonCrear");
+  botonCrear.disabled = false;
+  botonCrear.textContent = "🎉 Generar examen";
+
+  // Diseño
+  document.getElementById("tipoFondo").value = "tema";
+  seleccionarTema("floral");
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  document.getElementById("materia").focus();
+}
   </script>
 
 </body>
