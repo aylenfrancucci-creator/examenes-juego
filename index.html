@@ -12,9 +12,20 @@
 
 <body>
 
-    <!-- PANTALLA INICIAL -->
-    <div id="pantallaInicio">
+   
+   <!-- PANTALLA DE CARGA -->
+<div id="pantallaCarga">
+  <div class="spinner" id="spinnerCarga"></div>
+  <h2 id="textoCarga">Preparando tu examen...</h2>
+  <p id="subtextoCarga">Esto puede tardar unos segundos.</p>
+  <button type="button" id="botonReintentar"
+          onclick="cargarExamen()" hidden>
+    🔄 Reintentar
+  </button>
+</div>
 
+<!-- PANTALLA INICIAL -->
+<div id="pantallaInicio" style="display: none;">
 <h1 id="nombreMateria">Examen</h1>
         <p>Nombre del alumno:</p>
         <input type="text" id="nombre" placeholder="Escribí tu nombre">
