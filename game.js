@@ -1,4 +1,4 @@
-console.log("game.js v3 cargado");
+console.log("game.js v4 cargado");
 
 const URL_APPS_SCRIPT =
   "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
@@ -245,7 +245,7 @@ function cargarExamen() {
 // ==================================================
 // COMENZAR EXAMEN
 // ==================================================
-function comenzarExamen() {
+async function comenzarExamen() {
   if (!configuracionExamen) {
     alert("El examen todavía se está cargando. Esperá un momento.");
     return;
@@ -265,6 +265,50 @@ function comenzarExamen() {
   if (!Array.isArray(disponibles) || disponibles.length < cantidad) {
     alert("Este examen no tiene suficientes preguntas disponibles.");
     return;
+  }
+
+  // ---------- Una sola oportunidad por examen ----------
+  const boton = document.getElementById("botonComenzar");
+  const mensajeInicio = document.getElementById("mensajeInicio");
+  const textoBoton = boton.textContent;
+
+  boton.disabled = true;
+  boton.textContent = "Verificando...";
+  mensajeInicio.textContent = "";
+
+  try {
+    const idExamen =
+      new URLSearchParams(window.location.search).get("id");
+
+    const respuesta = await fetch(URL_APPS_SCRIPT, {
+      method: "POST",
+      body: JSON.stringify({
+        accion: "registrarInicio",
+        idExamen: idExamen,
+        alumno: nombreAlumno,
+        curso: cursoAlumno,
+        horaInicio: new Date().toLocaleString("es-AR")
+      })
+    });
+
+    const datos = await respuesta.json();
+
+    if (!datos.ok) {
+      mensajeInicio.textContent = datos.yaRealizado
+        ? "Ya realizaste este examen. Si creés que es un error, avisale a tu profesor/a."
+        : (datos.error || "No se pudo comenzar el examen. Probá de nuevo.");
+      mensajeInicio.style.color = "#b91c1c";
+      return;
+    }
+  } catch (error) {
+    console.error("Error al registrar el inicio:", error);
+    mensajeInicio.textContent =
+      "No pudimos verificar tu examen. Revisá tu conexión e intentá de nuevo.";
+    mensajeInicio.style.color = "#b91c1c";
+    return;
+  } finally {
+    boton.disabled = false;
+    boton.textContent = textoBoton;
   }
 
   // Con protección activada, primero se muestra el aviso
@@ -728,6 +772,7 @@ async function terminarExamen() {
         accion: "guardarResultado",
         idExamen: idExamen,
         alumno: nombreAlumno,
+        curso: cursoAlumno,
         nota: nota,
         aciertos: `${respuestasCorrectas}/${total}`,
         horaInicio: horaInicio.toLocaleString("es-AR"),
