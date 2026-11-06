@@ -60,6 +60,7 @@ button:hover {
 ======================================== */
 #pantallaCarga,
 #pantallaInicio,
+#pantallaAviso,
 #pantallaExamen {
   width: 100%;
   max-width: 720px;
@@ -141,6 +142,19 @@ button:hover {
 #resultado.incorrecto { color: #bd3434; }
 
 /* ========================================
+   AVISO DE SEGURIDAD
+======================================== */
+#pantallaAviso h1 {
+  font-size: 30px;
+  margin: 0 0 12px;
+}
+
+#pantallaAviso p {
+  font-weight: normal;
+  line-height: 1.6;
+}
+
+/* ========================================
    PANTALLA DE CARGA
 ======================================== */
 #pantallaCarga {
@@ -175,6 +189,7 @@ button:hover {
 
   #pantallaCarga,
   #pantallaInicio,
+  #pantallaAviso,
   #pantallaExamen {
     margin: 12px auto;
     padding: 22px 16px;
