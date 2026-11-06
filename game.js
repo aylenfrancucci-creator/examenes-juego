@@ -1,4 +1,4 @@
-console.log("game.js v2 cargado");
+console.log("game.js v3 cargado");
 
 const URL_APPS_SCRIPT =
   "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
@@ -11,6 +11,14 @@ let nombreAlumno = "";
 let cursoAlumno = "";
 let horaInicio = null;
 let examenTerminado = false;
+
+// Protección al abandonar la página
+const PREGUNTAS_DE_BLOQUEO = 10;
+let proteccionActiva = false;
+let examenEnCurso = false;
+let salioDePagina = false;
+let reservaPreguntas = [];
+let bloqueos = new Map();
 
 // ==================================================
 // DISEÑO
@@ -101,6 +109,7 @@ function aplicarDiseno() {
 
     #pantallaCarga,
     #pantallaInicio,
+    #pantallaAviso,
     #pantallaExamen {
       color: var(--examen-color-texto);
     }
@@ -109,6 +118,7 @@ function aplicarDiseno() {
     #numeroPregunta,
     #textoPregunta,
     #pantallaCarga h2,
+    #pantallaAviso h1,
     #pantallaInicio h1,
     #pantallaInicio h2,
     #pantallaExamen h1,
@@ -117,6 +127,7 @@ function aplicarDiseno() {
     }
 
     #pantallaCarga button,
+    #pantallaAviso button,
     #pantallaInicio button,
     #pantallaExamen button:not(.opcion) {
       background: var(--examen-color-boton) !important;
@@ -212,6 +223,7 @@ function cargarExamen() {
       }
 
       configuracionExamen = datos.examen;
+      proteccionActiva = configuracionExamen.proteccion === true;
       aplicarDiseno();
 
       document.getElementById("nombreMateria").textContent =
@@ -255,17 +267,124 @@ function comenzarExamen() {
     return;
   }
 
-  preguntasSeleccionadas = mezclarArray(disponibles).slice(0, cantidad);
+  // Con protección activada, primero se muestra el aviso
+  if (proteccionActiva) {
+    document.getElementById("pantallaInicio").style.display = "none";
+    document.getElementById("pantallaAviso").style.display = "block";
+    return;
+  }
+
+  iniciarExamen();
+}
+
+// ==================================================
+// INICIAR EXAMEN (después del aviso, si lo hay)
+// ==================================================
+function iniciarExamen() {
+  const cantidad = configuracionExamen.preguntasPorAlumno;
+  const mezcladas = mezclarArray(configuracionExamen.preguntas);
+
+  preguntasSeleccionadas = mezcladas.slice(0, cantidad);
+  reservaPreguntas = mezcladas.slice(cantidad);
+  bloqueos = new Map();
+
   preguntaActual = 0;
   respuestasCorrectas = 0;
   examenTerminado = false;
+  examenEnCurso = true;
+  salioDePagina = false;
   horaInicio = new Date();
 
   document.getElementById("pantallaInicio").style.display = "none";
+  document.getElementById("pantallaAviso").style.display = "none";
   document.getElementById("pantallaExamen").style.display = "block";
 
   mostrarPregunta();
 }
+
+// ==================================================
+// PROTECCIÓN AL ABANDONAR LA PÁGINA
+// ==================================================
+function preguntaYaRespondida() {
+  return [...document.querySelectorAll("#opciones .opcion")]
+    .some(boton => boton.disabled);
+}
+
+// Cambia la pregunta actual por otra. Devuelve true si pudo.
+function reemplazarPreguntaActual() {
+  const posicion = preguntaActual;
+  const actual = preguntasSeleccionadas[posicion];
+
+  // 1) Buscar en la reserva una pregunta que no esté bloqueada
+  const elegibles = [];
+  reservaPreguntas.forEach((pregunta, indice) => {
+    const bloqueadaHasta = bloqueos.get(pregunta);
+    if (
+      bloqueadaHasta === undefined ||
+      preguntaActual >= bloqueadaHasta
+    ) {
+      elegibles.push(indice);
+    }
+  });
+
+  if (elegibles.length > 0) {
+    const indice =
+      elegibles[Math.floor(Math.random() * elegibles.length)];
+    const nueva = reservaPreguntas[indice];
+
+    reservaPreguntas[indice] = actual;
+    preguntasSeleccionadas[posicion] = nueva;
+    bloqueos.delete(nueva);
+    bloqueos.set(actual, posicion + PREGUNTAS_DE_BLOQUEO);
+    return true;
+  }
+
+  // 2) Sin reserva disponible: intercambiar con una pregunta posterior
+  const ultima = preguntasSeleccionadas.length - 1;
+  if (posicion >= ultima) return false;
+
+  const destino = Math.min(posicion + PREGUNTAS_DE_BLOQUEO, ultima);
+  [
+    preguntasSeleccionadas[posicion],
+    preguntasSeleccionadas[destino]
+  ] = [
+    preguntasSeleccionadas[destino],
+    preguntasSeleccionadas[posicion]
+  ];
+  return true;
+}
+
+function marcarSalida() {
+  if (!proteccionActiva || !examenEnCurso || examenTerminado) return;
+  if (preguntaYaRespondida()) return;
+  salioDePagina = true;
+}
+
+function alVolver() {
+  if (!salioDePagina) return;
+  salioDePagina = false;
+
+  if (!proteccionActiva || !examenEnCurso || examenTerminado) return;
+  if (preguntaYaRespondida()) return;
+
+  if (reemplazarPreguntaActual()) {
+    mostrarPregunta();
+    const aviso = document.getElementById("resultado");
+    aviso.textContent =
+      "⚠️ Saliste de la página, por eso cambiamos tu pregunta.";
+    aviso.style.color = "#b45309";
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    marcarSalida();
+  } else {
+    alVolver();
+  }
+});
+window.addEventListener("blur", marcarSalida);
+window.addEventListener("focus", alVolver);
 
 // ==================================================
 // MOSTRAR PREGUNTA
@@ -520,6 +639,7 @@ function obtenerMensajeNota(nota) {
 async function terminarExamen() {
   if (examenTerminado) return;
   examenTerminado = true;
+  examenEnCurso = false;
 
   const total = preguntasSeleccionadas.length;
   const nota = Math.round((respuestasCorrectas / total) * 100) / 10;
