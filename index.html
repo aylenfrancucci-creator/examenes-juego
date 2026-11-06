@@ -1,63 +1,48 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>Examen</title>
-
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Examen</title>
+<link rel="stylesheet" href="style.css?v=2">
 </head>
-
 <body>
 
-   
-   <!-- PANTALLA DE CARGA -->
+<!-- PANTALLA DE CARGA -->
 <div id="pantallaCarga">
   <div class="spinner" id="spinnerCarga"></div>
   <h2 id="textoCarga">Preparando tu examen...</h2>
   <p id="subtextoCarga">Esto puede tardar unos segundos.</p>
-  <button type="button" id="botonReintentar"
-          onclick="cargarExamen()" hidden>
+  <button type="button" id="botonReintentar" onclick="cargarExamen()" hidden>
     🔄 Reintentar
   </button>
 </div>
 
 <!-- PANTALLA INICIAL -->
 <div id="pantallaInicio" style="display: none;">
-<h1 id="nombreMateria">Examen</h1>
-        <p>Nombre del alumno:</p>
-        <input type="text" id="nombre" placeholder="Escribí tu nombre">
+  <h1 id="nombreMateria">Examen</h1>
 
-        <p>Curso:</p>
-        <input type="text" id="curso" placeholder="Ej: 2°A">
+  <p>Nombre del alumno:</p>
+  <input type="text" id="nombre" placeholder="Escribí tu nombre">
 
-        <br><br>
+  <p>Curso:</p>
+  <input type="text" id="curso" placeholder="Ej: 2°A">
 
-        <button onclick="comenzarExamen()">
-            Comenzar examen
-        </button>
+  <br><br>
+  <button onclick="comenzarExamen()">
+    Comenzar examen
+  </button>
+</div>
 
-    </div>
-
-
-    <!-- PANTALLA DEL EXAMEN -->
-    <div id="pantallaExamen" style="display: none;">
-
-        <h2 id="numeroPregunta"></h2>
-
-        <h1 id="textoPregunta"></h1>
-
-        <div id="opciones"></div>
-
-        <p id="resultado"></p>
-
-    </div>
+<!-- PANTALLA DEL EXAMEN -->
+<div id="pantallaExamen" style="display: none;">
+  <h2 id="numeroPregunta"></h2>
+  <h1 id="textoPregunta"></h1>
+  <div id="opciones"></div>
+  <p id="resultado"></p>
+</div>
 
 <script src="config.js"></script>
-<script src="game.js"></script>
-  
+<script src="game.js?v=2"></script>
 </body>
-
 </html>
