@@ -179,6 +179,71 @@
 }
 
 /* ==================================================
+   LISTA DE EXÁMENES
+================================================== */
+#listaExamenes {
+  margin: 20px 0 28px;
+  padding: 20px;
+  border: 1px solid #ead8e7;
+  border-radius: 18px;
+  background: #fffaff;
+}
+
+#listaExamenes h2 {
+  margin-top: 0;
+  text-align: left;
+}
+
+.examen-item {
+  margin: 14px 0;
+  padding: 16px;
+  border: 1px solid #ead8e7;
+  border-radius: 14px;
+  background: white;
+}
+
+.examen-item h3 {
+  margin: 0 0 6px;
+  color: #9d4385;
+  overflow-wrap: anywhere;
+}
+
+.examen-datos {
+  margin: 0 0 12px;
+  color: #665a69;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.examen-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.examen-acciones a,
+.examen-acciones button {
+  display: inline-block;
+  margin: 0 !important;
+  padding: 9px 14px;
+  border: 1px solid #d9bfd4;
+  border-radius: 10px;
+  background: #fff7fc;
+  color: #7c3369;
+  font: inherit;
+  font-size: 14px;
+  font-weight: bold;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.examen-acciones a:hover,
+.examen-acciones button:hover {
+  background: #f8e6f4;
+  transform: none;
+}
+
+/* ==================================================
    PROTECCIÓN AL ABANDONAR
 ================================================== */
 .opcion-proteccion {
@@ -438,10 +503,18 @@
     <button type="button" onclick="nuevoExamen()">
       ➕ Nuevo examen
     </button>
+    <button type="button" id="botonLista" onclick="alternarLista()">
+      📋 Mis exámenes
+    </button>
     <button type="button" onclick="salir()">
       🔒 Salir
     </button>
   </div>
+
+  <section id="listaExamenes" hidden>
+    <h2>📋 Mis exámenes</h2>
+    <div id="contenidoLista" aria-live="polite"></div>
+  </section>
 
   <label class="campo" for="materia">Materia:</label>
   <input id="materia" type="text" placeholder="Ej: Historia">
@@ -768,6 +841,155 @@ async function entrar(evento) {
     boton.disabled = false;
     boton.textContent = "Entrar";
   }
+}
+
+/* ==================================================
+   LISTA DE EXÁMENES CREADOS
+================================================== */
+function enlaceDeAlumno(id) {
+  return window.location.href.substring(
+    0,
+    window.location.href.lastIndexOf("/") + 1
+  ) + "index.html?id=" + encodeURIComponent(id);
+}
+
+function alternarLista() {
+  const seccion = document.getElementById("listaExamenes");
+
+  if (!seccion.hidden) {
+    seccion.hidden = true;
+    return;
+  }
+
+  seccion.hidden = false;
+  cargarLista();
+}
+
+async function cargarLista() {
+  const contenido = document.getElementById("contenidoLista");
+  const boton = document.getElementById("botonLista");
+
+  contenido.textContent = "Cargando tus exámenes...";
+  boton.disabled = true;
+
+  try {
+    const respuesta = await fetch(URL_APPS_SCRIPT, {
+      method: "POST",
+      body: JSON.stringify({
+        accion: "listarExamenes",
+        clave: claveProfesora
+      })
+    });
+
+    const datos = await respuesta.json();
+
+    if (!datos.ok) {
+      throw new Error(datos.error || "No se pudo cargar la lista.");
+    }
+
+    dibujarLista(datos.examenes);
+
+  } catch (error) {
+    console.error("Error al cargar la lista:", error);
+    contenido.textContent = "";
+
+    const mensaje = document.createElement("p");
+    mensaje.textContent = "No se pudo cargar la lista: " + error.message;
+
+    const reintentar = document.createElement("button");
+    reintentar.type = "button";
+    reintentar.textContent = "🔄 Reintentar";
+    reintentar.addEventListener("click", cargarLista);
+
+    contenido.append(mensaje, reintentar);
+
+  } finally {
+    boton.disabled = false;
+  }
+}
+
+function dibujarLista(examenes) {
+  const contenido = document.getElementById("contenidoLista");
+  contenido.textContent = "";
+
+  if (!examenes.length) {
+    const vacio = document.createElement("p");
+    vacio.textContent = "Todavía no creaste ningún examen.";
+    contenido.appendChild(vacio);
+    return;
+  }
+
+  const total = document.createElement("p");
+  total.className = "ayuda";
+  total.textContent =
+    examenes.length === 1
+      ? "1 examen, el más nuevo primero."
+      : `${examenes.length} exámenes, los más nuevos primero.`;
+  contenido.appendChild(total);
+
+  examenes.forEach(examen => {
+    const tarjeta = document.createElement("article");
+    tarjeta.className = "examen-item";
+
+    const titulo = document.createElement("h3");
+    titulo.textContent = examen.materia || "(sin materia)";
+
+    let fecha = "";
+    if (examen.creado) {
+      const f = new Date(examen.creado);
+      if (!isNaN(f.getTime())) {
+        fecha = " · creado el " + f.toLocaleDateString("es-AR");
+      }
+    }
+
+    const datos = document.createElement("p");
+    datos.className = "examen-datos";
+    datos.textContent =
+      `${examen.cantidadPreguntas} preguntas disponibles · ` +
+      `${examen.preguntasPorAlumno} por alumno` +
+      (examen.proteccion ? " · 🛡️ con protección" : "") +
+      fecha;
+
+    const acciones = document.createElement("div");
+    acciones.className = "examen-acciones";
+
+    const enlace = enlaceDeAlumno(examen.id);
+
+    const abrir = document.createElement("a");
+    abrir.href = enlace;
+    abrir.target = "_blank";
+    abrir.rel = "noopener noreferrer";
+    abrir.textContent = "🔗 Abrir examen";
+
+    const copiar = document.createElement("button");
+    copiar.type = "button";
+    copiar.textContent = "📋 Copiar enlace";
+    copiar.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(enlace);
+        copiar.textContent = "✓ ¡Copiado!";
+        setTimeout(() => {
+          copiar.textContent = "📋 Copiar enlace";
+        }, 2000);
+      } catch {
+        prompt("Copiá este enlace:", enlace);
+      }
+    });
+
+    acciones.append(abrir, copiar);
+
+    if (examen.urlResultados) {
+      const resultados = document.createElement("a");
+      resultados.href = examen.urlResultados;
+      resultados.target = "_blank";
+      resultados.rel = "noopener noreferrer";
+      resultados.textContent = "📊 Ver resultados";
+      acciones.appendChild(resultados);
+    }
+
+    tarjeta.append(titulo, datos, acciones);
+    contenido.appendChild(tarjeta);
+  });
 }
 
 function salir() {
@@ -1355,13 +1577,7 @@ async function crearExamen() {
       );
     }
 
-    const enlaceAlumno =
-      window.location.href.substring(
-        0,
-        window.location.href.lastIndexOf("/") + 1
-      ) +
-      "index.html?id=" +
-      encodeURIComponent(examen.id);
+    const enlaceAlumno = enlaceDeAlumno(examen.id);
 
     resultadoDiv.innerHTML = "";
 
@@ -1434,6 +1650,11 @@ async function crearExamen() {
     );
 
     resultadoDiv.scrollIntoView({ behavior: "smooth" });
+
+    // Si la lista está abierta, se actualiza con el examen nuevo
+    if (!document.getElementById("listaExamenes").hidden) {
+      cargarLista();
+    }
 
   } catch (error) {
     console.error("Error al crear el examen:", error);
