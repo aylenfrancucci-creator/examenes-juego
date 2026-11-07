@@ -1,4 +1,4 @@
-console.log("game.js v5 cargado");
+console.log("game.js v6 cargado");
 
 const URL_APPS_SCRIPT =
   "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
@@ -34,8 +34,12 @@ const DISEÑO_PREDETERMINADO = {
   colorTitulo: "#9d4385",
   colorTexto: "#403542",
   colorBoton: "#9d4385",
-  fuente: "elegante"
+  fuente: "elegante",
+  fondoImagenId: "",
+  velo: 25
 };
+
+const ID_IMAGEN_VALIDO = /^[A-Za-z0-9_-]{10,120}$/;
 
 const FONDOS_TEMA = {
   floral:
@@ -74,6 +78,40 @@ function mezclarArray(array) {
 }
 
 // ==================================================
+// IMAGEN DE FONDO
+// ==================================================
+// El velo claro suaviza la imagen (0 a 80 %).
+function construirFondoImagen(url, velo, colorBase) {
+  const opacidad = Math.min(Math.max(Number(velo) || 0, 0), 80) / 100;
+  return (
+    `linear-gradient(rgba(255,255,255,${opacidad}), rgba(255,255,255,${opacidad})), ` +
+    `url("${url}") center / cover no-repeat ${colorBase}`
+  );
+}
+
+// Prueba varias direcciones de Drive hasta que una cargue.
+// Si ninguna funciona, el examen sigue con el fondo del tema.
+function cargarImagenFondo(id, alTerminar) {
+  const candidatas = [
+    `https://drive.google.com/thumbnail?id=${id}&sz=w1920`,
+    `https://lh3.googleusercontent.com/d/${id}=w1920`
+  ];
+
+  function probar(indice) {
+    if (indice >= candidatas.length) {
+      console.warn("No se pudo cargar la imagen de fondo.");
+      return;
+    }
+    const imagen = new Image();
+    imagen.onload = () => alTerminar(candidatas[indice]);
+    imagen.onerror = () => probar(indice + 1);
+    imagen.src = candidatas[indice];
+  }
+
+  probar(0);
+}
+
+// ==================================================
 // APLICAR DISEÑO
 // ==================================================
 function aplicarDiseno() {
@@ -91,6 +129,19 @@ function aplicarDiseno() {
   const raiz = document.documentElement.style;
 
   raiz.setProperty("--examen-fondo", fondo);
+
+  // Imagen propia: se muestra apenas termina de cargar
+  if (
+    diseno.tipoFondo === "imagen" &&
+    ID_IMAGEN_VALIDO.test(String(diseno.fondoImagenId || ""))
+  ) {
+    cargarImagenFondo(diseno.fondoImagenId, url => {
+      raiz.setProperty(
+        "--examen-fondo",
+        construirFondoImagen(url, diseno.velo, diseno.colorFondo)
+      );
+    });
+  }
   raiz.setProperty("--examen-color-titulo", diseno.colorTitulo);
   raiz.setProperty("--examen-color-texto", diseno.colorTexto);
   raiz.setProperty("--examen-color-boton", diseno.colorBoton);
@@ -104,7 +155,13 @@ function aplicarDiseno() {
   }
 
   estilos.textContent = `
+    html {
+      min-height: 100%;
+    }
+
     body {
+      min-height: 100vh;
+      box-sizing: border-box;
       background: var(--examen-fondo) !important;
       color: var(--examen-color-texto) !important;
       font-family: var(--examen-fuente) !important;
