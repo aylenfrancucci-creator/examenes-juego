@@ -30,6 +30,7 @@
 
 #configurador input[type="text"],
 #configurador input[type="number"],
+#configurador select,
 #configurador textarea {
   display: block;
   width: 100%;
@@ -530,6 +531,28 @@
     value="5"
   >
 
+  <label class="campo" for="escalaNota">Escala de la nota:</label>
+  <select id="escalaNota">
+    <option value="10">Sobre 10</option>
+    <option value="100">Sobre 100</option>
+  </select>
+
+  <label class="campo" for="notaMinima">
+    Nota mínima para aprobar (opcional):
+  </label>
+  <input
+    id="notaMinima"
+    type="number"
+    min="0"
+    max="10"
+    step="0.5"
+    placeholder="Ej: 6"
+  >
+  <p class="ayuda">
+    Si la completás, al final del examen el alumno ve si aprobó o no.
+    Si la dejás vacía, solo ve su nota.
+  </p>
+
   <!-- ==================================================
        PROTECCIÓN AL ABANDONAR LA PÁGINA
   ================================================== -->
@@ -780,6 +803,27 @@ const URL_APPS_SCRIPT =
 let preguntasPreparadas = [];
 
 /* ==================================================
+   ESCALA DE LA NOTA
+================================================== */
+function actualizarEscala() {
+  const escala = Number(document.getElementById("escalaNota").value);
+  const campo = document.getElementById("notaMinima");
+
+  campo.max = escala;
+  campo.step = escala === 100 ? 1 : 0.5;
+  campo.placeholder = escala === 100 ? "Ej: 60" : "Ej: 6";
+
+  // Si la nota mínima quedó fuera de la nueva escala, se borra
+  if (campo.value !== "" && Number(campo.value) > escala) {
+    campo.value = "";
+  }
+}
+
+document
+  .getElementById("escalaNota")
+  .addEventListener("change", actualizarEscala);
+
+/* ==================================================
    CLAVE DE LA PROFESORA
 ================================================== */
 let claveProfesora = "";
@@ -946,7 +990,11 @@ function dibujarLista(examenes) {
     datos.className = "examen-datos";
     datos.textContent =
       `${examen.cantidadPreguntas} preguntas disponibles · ` +
-      `${examen.preguntasPorAlumno} por alumno` +
+      `${examen.preguntasPorAlumno} por alumno · ` +
+      `sobre ${examen.escala}` +
+      (examen.notaMinima !== null
+        ? ` · aprueba con ${examen.notaMinima}`
+        : "") +
       (examen.proteccion ? " · 🛡️ con protección" : "") +
       fecha;
 
@@ -1495,6 +1543,18 @@ async function crearExamen() {
     return;
   }
 
+  const escala = Number(document.getElementById("escalaNota").value);
+  const textoMinima = document.getElementById("notaMinima").value.trim();
+  const notaMinima = textoMinima === "" ? null : Number(textoMinima);
+
+  if (
+    notaMinima !== null &&
+    (isNaN(notaMinima) || notaMinima < 0 || notaMinima > escala)
+  ) {
+    alert(`La nota mínima debe estar entre 0 y ${escala}.`);
+    return;
+  }
+
   const preguntas = [];
 
   for (let i = 0; i < tarjetas.length; i++) {
@@ -1545,7 +1605,9 @@ async function crearExamen() {
     cantidadPreguntas: preguntas.length,
     preguntas: preguntas,
     diseno: obtenerDisenoSeleccionado(),
-    proteccion: document.getElementById("proteccionSalida").checked
+    proteccion: document.getElementById("proteccionSalida").checked,
+    escala: escala,
+    notaMinima: notaMinima
   };
 
   boton.disabled = true;
@@ -1565,7 +1627,9 @@ async function crearExamen() {
         cantidadPreguntas: examen.cantidadPreguntas,
         preguntas: examen.preguntas,
         diseno: examen.diseno,
-        proteccion: examen.proteccion
+        proteccion: examen.proteccion,
+        escala: examen.escala,
+        notaMinima: examen.notaMinima
       })
     });
 
@@ -1589,6 +1653,10 @@ async function crearExamen() {
       `Materia: ${examen.materia} · ` +
       `${examen.cantidadPreguntas} preguntas disponibles · ` +
       `${examen.preguntasPorAlumno} por alumno` +
+      ` · sobre ${examen.escala}` +
+      (examen.notaMinima !== null
+        ? ` · aprueba con ${examen.notaMinima}`
+        : "") +
       (examen.proteccion ? " · 🛡️ con protección" : "");
 
     const textoAlumno = document.createElement("p");
@@ -1695,6 +1763,9 @@ function nuevoExamen(pedirConfirmacion = true) {
   porAlumno.value = 5;
 
   document.getElementById("proteccionSalida").checked = false;
+  document.getElementById("escalaNota").value = "10";
+  document.getElementById("notaMinima").value = "";
+  actualizarEscala();
 
   // Preguntas separadas
   preguntasPreparadas = [];
