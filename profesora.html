@@ -180,6 +180,44 @@
 }
 
 /* ==================================================
+   IMAGEN DE FONDO
+================================================== */
+#controlesImagen {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #ead8e7;
+  border-radius: 14px;
+  background: white;
+}
+
+#controlesImagen input[type="file"] {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: 2px dashed #d9c8d8;
+  border-radius: 10px;
+  background: #fffaff;
+  font: inherit;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+#controlesImagen input[type="range"] {
+  width: 100%;
+  accent-color: #9d4385;
+}
+
+#estadoImagen {
+  min-height: 20px;
+  margin: 10px 0 0;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+#estadoImagen.error { color: #b91c1c; }
+#estadoImagen.exito { color: #15803d; }
+
+/* ==================================================
    LISTA DE EXÁMENES
 ================================================== */
 #listaExamenes {
@@ -629,6 +667,7 @@
         <select id="tipoFondo">
           <option value="tema">Fondo del tema</option>
           <option value="liso">Color liso</option>
+          <option value="imagen">Imagen propia</option>
         </select>
       </div>
 
@@ -644,6 +683,38 @@
         </select>
       </div>
 
+    </div>
+
+    <div id="controlesImagen" hidden>
+      <strong>🖼️ Imagen de fondo</strong>
+      <p class="ayuda">
+        Elegí una foto o imagen de tu computadora o celular. Se achica
+        sola y se guarda en tu Google Drive para que los alumnos la vean.
+        Si no se llega a cargar, el examen usa el fondo del tema.
+      </p>
+
+      <input type="file" id="archivoImagen" accept="image/*">
+      <p id="estadoImagen" aria-live="polite"></p>
+
+      <label class="campo" for="veloImagen">
+        Suavizar la imagen: <span id="valorVelo">25%</span>
+      </label>
+      <input
+        type="range"
+        id="veloImagen"
+        min="0"
+        max="80"
+        step="5"
+        value="25"
+      >
+      <p class="ayuda">
+        Aclara la imagen para que no distraiga. Con 0 % se ve con todo
+        su color.
+      </p>
+
+      <button type="button" onclick="quitarImagenFondo()">
+        🗑️ Quitar imagen
+      </button>
     </div>
 
     <div id="controlesPersonalizados">
@@ -1128,6 +1199,19 @@ const temasDiseno = {
 
 let temaSeleccionado = "floral";
 
+// Imagen de fondo propia
+let imagenVistaPrevia = "";
+let imagenFondoId = "";
+let subiendoImagen = false;
+
+function construirFondoImagen(url, velo, colorBase) {
+  const opacidad = Math.min(Math.max(Number(velo) || 0, 0), 80) / 100;
+  return (
+    `linear-gradient(rgba(255,255,255,${opacidad}), rgba(255,255,255,${opacidad})), ` +
+    `url("${url}") center / cover no-repeat ${colorBase}`
+  );
+}
+
 function actualizarVistaPrevia() {
   const vista = document.getElementById("vistaPreviaDiseno");
   if (!vista) return;
@@ -1163,12 +1247,22 @@ function actualizarVistaPrevia() {
     tecnica: "'Courier New', monospace"
   };
 
-  vista.style.setProperty(
-    "--fondo-preview",
-    tipoFondo === "liso"
-      ? fondoElegido
-      : fondosTema[temaSeleccionado]
-  );
+  const velo = document.getElementById("veloImagen").value;
+  let fondoFinal;
+
+  if (tipoFondo === "liso") {
+    fondoFinal = fondoElegido;
+  } else if (tipoFondo === "imagen" && imagenVistaPrevia) {
+    fondoFinal = construirFondoImagen(imagenVistaPrevia, velo, fondoElegido);
+  } else {
+    fondoFinal = fondosTema[temaSeleccionado];
+  }
+
+  document.getElementById("controlesImagen").hidden =
+    tipoFondo !== "imagen";
+  document.getElementById("valorVelo").textContent = velo + "%";
+
+  vista.style.setProperty("--fondo-preview", fondoFinal);
   vista.style.setProperty("--titulo-preview", tituloElegido);
   vista.style.setProperty("--texto-preview", textoElegido);
   vista.style.setProperty("--boton-preview", botonElegido);
@@ -1210,7 +1304,12 @@ function obtenerDisenoSeleccionado() {
     colorTitulo: document.getElementById("colorTitulo").value,
     colorTexto: document.getElementById("colorTexto").value,
     colorBoton: document.getElementById("colorBoton").value,
-    fuente: document.getElementById("fuenteDiseno").value
+    fuente: document.getElementById("fuenteDiseno").value,
+    fondoImagenId:
+      document.getElementById("tipoFondo").value === "imagen"
+        ? imagenFondoId
+        : "",
+    velo: Number(document.getElementById("veloImagen").value)
   };
 }
 
@@ -1229,13 +1328,142 @@ document
   "colorFondo",
   "colorTitulo",
   "colorTexto",
-  "colorBoton"
+  "colorBoton",
+  "veloImagen"
 ].forEach(id => {
   document.getElementById(id).addEventListener("input", actualizarVistaPrevia);
   document.getElementById(id).addEventListener("change", actualizarVistaPrevia);
 });
 
 seleccionarTema("floral");
+
+/* ==================================================
+   IMAGEN DE FONDO PROPIA
+================================================== */
+const MAX_LADO_IMAGEN = 1920;
+const MAX_BYTES_ORIGINAL = 15 * 1024 * 1024;
+
+function mostrarEstadoImagen(texto, tipo) {
+  const estado = document.getElementById("estadoImagen");
+  estado.textContent = texto;
+  estado.className = tipo || "";
+}
+
+// Achica la imagen y la convierte a JPEG para que pese poco.
+function reducirImagen(archivo) {
+  return new Promise((resolver, rechazar) => {
+    const lector = new FileReader();
+
+    lector.onerror = () =>
+      rechazar(new Error("No se pudo leer el archivo."));
+
+    lector.onload = () => {
+      const imagen = new Image();
+
+      imagen.onerror = () =>
+        rechazar(new Error("El archivo no parece una imagen válida."));
+
+      imagen.onload = () => {
+        const factor = Math.min(
+          1,
+          MAX_LADO_IMAGEN / Math.max(imagen.width, imagen.height)
+        );
+        const ancho = Math.max(1, Math.round(imagen.width * factor));
+        const alto = Math.max(1, Math.round(imagen.height * factor));
+
+        const lienzo = document.createElement("canvas");
+        lienzo.width = ancho;
+        lienzo.height = alto;
+
+        const contexto = lienzo.getContext("2d");
+        // Fondo blanco, por si la imagen tiene partes transparentes
+        contexto.fillStyle = "#ffffff";
+        contexto.fillRect(0, 0, ancho, alto);
+        contexto.drawImage(imagen, 0, 0, ancho, alto);
+
+        resolver(lienzo.toDataURL("image/jpeg", 0.8));
+      };
+
+      imagen.src = lector.result;
+    };
+
+    lector.readAsDataURL(archivo);
+  });
+}
+
+async function elegirImagenFondo(evento) {
+  const entrada = evento.target;
+  const archivo = entrada.files[0];
+
+  if (!archivo) return;
+
+  if (!archivo.type.startsWith("image/")) {
+    mostrarEstadoImagen("Elegí un archivo de imagen (JPG, PNG, etc.).", "error");
+    entrada.value = "";
+    return;
+  }
+
+  if (archivo.size > MAX_BYTES_ORIGINAL) {
+    mostrarEstadoImagen("La imagen pesa más de 15 MB. Elegí una más chica.", "error");
+    entrada.value = "";
+    return;
+  }
+
+  subiendoImagen = true;
+  imagenFondoId = "";
+  mostrarEstadoImagen("Preparando la imagen...");
+
+  try {
+    const dataUrl = await reducirImagen(archivo);
+
+    // Vista previa inmediata, sin esperar la subida
+    imagenVistaPrevia = dataUrl;
+    actualizarVistaPrevia();
+
+    mostrarEstadoImagen("Subiendo la imagen a tu Drive...");
+
+    const respuesta = await fetch(URL_APPS_SCRIPT, {
+      method: "POST",
+      body: JSON.stringify({
+        accion: "subirImagen",
+        clave: claveProfesora,
+        imagen: dataUrl.split(",")[1]
+      })
+    });
+
+    const datos = await respuesta.json();
+
+    if (!datos.ok) {
+      throw new Error(datos.error || "No se pudo subir la imagen.");
+    }
+
+    imagenFondoId = datos.id;
+    mostrarEstadoImagen("✓ Imagen lista para usar en el examen.", "exito");
+
+  } catch (error) {
+    console.error("Error con la imagen de fondo:", error);
+    imagenFondoId = "";
+    imagenVistaPrevia = "";
+    entrada.value = "";
+    actualizarVistaPrevia();
+    mostrarEstadoImagen("No se pudo usar la imagen: " + error.message, "error");
+
+  } finally {
+    subiendoImagen = false;
+  }
+}
+
+function quitarImagenFondo() {
+  imagenFondoId = "";
+  imagenVistaPrevia = "";
+  document.getElementById("archivoImagen").value = "";
+  mostrarEstadoImagen("");
+  actualizarVistaPrevia();
+}
+
+document
+  .getElementById("archivoImagen")
+  .addEventListener("change", elegirImagenFondo);
 
 /* ==================================================
    FUNCIONES DE PREGUNTAS
@@ -1555,6 +1783,22 @@ async function crearExamen() {
     return;
   }
 
+  if (subiendoImagen) {
+    alert("Esperá un momento: la imagen todavía se está subiendo.");
+    return;
+  }
+
+  if (
+    document.getElementById("tipoFondo").value === "imagen" &&
+    !imagenFondoId
+  ) {
+    alert(
+      "Elegiste «Imagen propia», pero todavía no hay una imagen lista. " +
+      "Elegí una imagen o cambiá el tipo de fondo."
+    );
+    return;
+  }
+
   const preguntas = [];
 
   for (let i = 0; i < tarjetas.length; i++) {
@@ -1781,6 +2025,8 @@ function nuevoExamen(pedirConfirmacion = true) {
 
   // Diseño
   document.getElementById("tipoFondo").value = "tema";
+  document.getElementById("veloImagen").value = 25;
+  quitarImagenFondo();
   seleccionarTema("floral");
 
   window.scrollTo({ top: 0, behavior: "smooth" });
