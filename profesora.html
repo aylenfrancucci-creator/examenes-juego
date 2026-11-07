@@ -144,6 +144,41 @@
 }
 
 /* ==================================================
+   PANTALLA DE CLAVE
+================================================== */
+#pantallaClave {
+  max-width: 420px;
+  margin: 60px auto;
+  padding: 32px 28px;
+  background: white;
+  border-radius: 22px;
+  box-shadow: 0 10px 35px rgba(100, 50, 90, .10);
+  text-align: center;
+}
+
+#pantallaClave h1 {
+  font-size: 30px;
+  margin: 0 0 12px;
+}
+
+#pantallaClave input[type="password"] {
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px;
+  border: 2px solid #e3d2e1;
+  border-radius: 10px;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+#mensajeClave {
+  min-height: 22px;
+  margin: 12px 0 0;
+  font-size: 15px;
+  color: #b91c1c;
+}
+
+/* ==================================================
    PROTECCIÓN AL ABANDONAR
 ================================================== */
 .opcion-proteccion {
@@ -373,13 +408,38 @@
 
 <body>
 
-<main id="configurador">
+<!-- ==================================================
+     PANTALLA DE CLAVE
+================================================== -->
+<section id="pantallaClave" hidden>
+  <h1>🔒 Entrar</h1>
+  <p class="ayuda">
+    Escribí la clave para crear exámenes.
+  </p>
+  <form onsubmit="entrar(event)">
+    <input
+      type="password"
+      id="campoClave"
+      placeholder="Clave"
+      autocomplete="current-password"
+    >
+    <button type="submit" id="botonEntrar" class="boton-principal">
+      Entrar
+    </button>
+  </form>
+  <p id="mensajeClave" aria-live="polite"></p>
+</section>
+
+<main id="configurador" hidden>
 
   <h1>⚙️ Crear examen</h1>
 
   <div class="centrado">
     <button type="button" onclick="nuevoExamen()">
       ➕ Nuevo examen
+    </button>
+    <button type="button" onclick="salir()">
+      🔒 Salir
     </button>
   </div>
 
@@ -645,6 +705,101 @@ const URL_APPS_SCRIPT =
   "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
 
 let preguntasPreparadas = [];
+
+/* ==================================================
+   CLAVE DE LA PROFESORA
+================================================== */
+let claveProfesora = "";
+
+async function verificarClaveEnServidor(clave) {
+  const respuesta = await fetch(URL_APPS_SCRIPT, {
+    method: "POST",
+    body: JSON.stringify({
+      accion: "verificarClave",
+      clave: clave
+    })
+  });
+  return respuesta.json();
+}
+
+function mostrarPanel() {
+  document.getElementById("pantallaClave").hidden = true;
+  document.getElementById("configurador").hidden = false;
+}
+
+async function entrar(evento) {
+  evento.preventDefault();
+
+  const campo = document.getElementById("campoClave");
+  const boton = document.getElementById("botonEntrar");
+  const mensaje = document.getElementById("mensajeClave");
+  const clave = campo.value;
+
+  if (!clave) {
+    mensaje.textContent = "Escribí la clave.";
+    return;
+  }
+
+  boton.disabled = true;
+  boton.textContent = "Verificando...";
+  mensaje.textContent = "";
+
+  try {
+    const datos = await verificarClaveEnServidor(clave);
+
+    if (datos.ok) {
+      claveProfesora = clave;
+      try {
+        sessionStorage.setItem("claveProfesora", clave);
+      } catch (error) {
+        // Si el navegador no permite guardarla, pedirá la clave
+        // de nuevo al recargar. No es un problema.
+      }
+      campo.value = "";
+      mostrarPanel();
+    } else {
+      mensaje.textContent = datos.error || "No se pudo entrar.";
+    }
+  } catch (error) {
+    console.error("Error al verificar la clave:", error);
+    mensaje.textContent =
+      "No se pudo verificar la clave. Revisá tu conexión e intentá de nuevo.";
+  } finally {
+    boton.disabled = false;
+    boton.textContent = "Entrar";
+  }
+}
+
+function salir() {
+  try {
+    sessionStorage.removeItem("claveProfesora");
+  } catch (error) {}
+  window.location.reload();
+}
+
+// Al abrir la página: si ya entró en esta pestaña, no vuelve a pedir la clave
+(async function iniciarSesion() {
+  try {
+    const guardada = sessionStorage.getItem("claveProfesora");
+
+    if (guardada) {
+      const datos = await verificarClaveEnServidor(guardada);
+
+      if (datos.ok) {
+        claveProfesora = guardada;
+        mostrarPanel();
+        return;
+      }
+
+      sessionStorage.removeItem("claveProfesora");
+    }
+  } catch (error) {
+    console.error("No se pudo recuperar la sesión:", error);
+  }
+
+  document.getElementById("pantallaClave").hidden = false;
+  document.getElementById("campoClave").focus();
+})();
 
 /* ==================================================
    DISEÑOS
@@ -1181,6 +1336,7 @@ async function crearExamen() {
       method: "POST",
       body: JSON.stringify({
         accion: "crearExamen",
+        clave: claveProfesora,
         id: examen.id,
         materia: examen.materia,
         preguntasPorAlumno: examen.preguntasPorAlumno,
