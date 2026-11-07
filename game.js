@@ -1,4 +1,4 @@
-console.log("game.js v4 cargado");
+console.log("game.js v5 cargado");
 
 const URL_APPS_SCRIPT =
   "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
@@ -11,6 +11,10 @@ let nombreAlumno = "";
 let cursoAlumno = "";
 let horaInicio = null;
 let examenTerminado = false;
+
+// Escala de la nota
+let escalaNota = 10;
+let notaMinima = null;
 
 // Protección al abandonar la página
 const PREGUNTAS_DE_BLOQUEO = 10;
@@ -224,6 +228,11 @@ function cargarExamen() {
 
       configuracionExamen = datos.examen;
       proteccionActiva = configuracionExamen.proteccion === true;
+      escalaNota = Number(configuracionExamen.escala) === 100 ? 100 : 10;
+      notaMinima =
+        typeof configuracionExamen.notaMinima === "number"
+          ? configuracionExamen.notaMinima
+          : null;
       aplicarDiseno();
 
       document.getElementById("nombreMateria").textContent =
@@ -631,6 +640,29 @@ function agregarEstilosResultado() {
       margin-top: 20px;
       min-height: 18px;
     }
+    .resultado-final .estado-aprobacion {
+      display: inline-flex;
+      flex-direction: column;
+      gap: 2px;
+      margin: -8px auto 22px;
+      padding: 10px 22px;
+      border-radius: 14px;
+      font-size: 19px;
+      font-weight: 800;
+    }
+    .resultado-final .estado-aprobacion small {
+      font-size: 12px;
+      font-weight: 600;
+      opacity: .8;
+    }
+    .resultado-final .estado-aprobacion.aprobado {
+      background: #e6f7ec;
+      color: #15803d;
+    }
+    .resultado-final .estado-aprobacion.desaprobado {
+      background: #fdeaea;
+      color: #b91c1c;
+    }
     @keyframes aparecerResultado {
       from { opacity: 0; transform: translateY(18px) scale(.98); }
       to { opacity: 1; transform: translateY(0) scale(1); }
@@ -661,20 +693,44 @@ function agregarEstilosResultado() {
 // ==================================================
 // MENSAJE SEGÚN NOTA
 // ==================================================
-function obtenerMensajeNota(nota) {
-  if (nota >= 10) {
-    return { icono: "🏆", titulo: "¡Perfecto!", mensaje: "¡Un examen impecable! Te luciste." };
+function obtenerMensajeNota(porcentaje, aprobado) {
+  const perfecto = {
+    icono: "🏆", titulo: "¡Perfecto!",
+    mensaje: "¡Un examen impecable! Te luciste."
+  };
+  const excelente = {
+    icono: "🎉", titulo: "¡Excelente trabajo!",
+    mensaje: "¡La rompiste! Seguí así."
+  };
+  const bueno = {
+    icono: "🌟", titulo: "¡Buen trabajo!",
+    mensaje: "¡Vas por buen camino!"
+  };
+  const practicar = {
+    icono: "💪", titulo: "¡A seguir practicando!",
+    mensaje: "Cada intento sirve para aprender."
+  };
+  const rendirse = {
+    icono: "📚", titulo: "¡A no rendirse!",
+    mensaje: "Repasar y volver a intentarlo ayuda un montón."
+  };
+
+  let resultado;
+  if (porcentaje >= 100) resultado = perfecto;
+  else if (porcentaje >= 80) resultado = excelente;
+  else if (porcentaje >= 60) resultado = bueno;
+  else if (porcentaje >= 40) resultado = practicar;
+  else resultado = rendirse;
+
+  // Si hay nota mínima, el mensaje tiene que ser coherente con ella
+  if (aprobado === false && (resultado === perfecto || resultado === excelente || resultado === bueno)) {
+    resultado = practicar;
   }
-  if (nota >= 8) {
-    return { icono: "🎉", titulo: "¡Excelente trabajo!", mensaje: "¡La rompiste! Seguí así." };
+  if (aprobado === true && (resultado === practicar || resultado === rendirse)) {
+    resultado = bueno;
   }
-  if (nota >= 6) {
-    return { icono: "🌟", titulo: "¡Buen trabajo!", mensaje: "¡Vas por buen camino!" };
-  }
-  if (nota >= 4) {
-    return { icono: "💪", titulo: "¡A seguir practicando!", mensaje: "Cada intento sirve para aprender." };
-  }
-  return { icono: "📚", titulo: "¡A no rendirse!", mensaje: "Repasar y volver a intentarlo ayuda un montón." };
+
+  return resultado;
 }
 
 // ==================================================
@@ -686,10 +742,22 @@ async function terminarExamen() {
   examenEnCurso = false;
 
   const total = preguntasSeleccionadas.length;
-  const nota = Math.round((respuestasCorrectas / total) * 100) / 10;
+  const decimales = escalaNota === 10 ? 1 : 0;
+  const factor = Math.pow(10, decimales);
+  const nota =
+    Math.round((respuestasCorrectas / total) * escalaNota * factor) / factor;
   const porcentaje = Math.round((respuestasCorrectas / total) * 100);
+  const aprobado = notaMinima === null ? null : nota >= notaMinima;
   const tiempoTotal = calcularTiempoTotal();
-  const mensaje = obtenerMensajeNota(nota);
+  const mensaje = obtenerMensajeNota(porcentaje, aprobado);
+
+  const estadoAprobacion =
+    aprobado === null
+      ? ""
+      : `<div class="estado-aprobacion ${aprobado ? "aprobado" : "desaprobado"}">
+           ${aprobado ? "✅ Aprobado" : "❌ Desaprobado"}
+           <small>Nota mínima para aprobar: ${notaMinima}</small>
+         </div>`;
 
   agregarEstilosResultado();
 
@@ -702,17 +770,18 @@ async function terminarExamen() {
       </p>
 
       <div class="nota-grande">
-        <span class="nota-numero" id="notaAnimada">0.0</span>
-        <span class="nota-maxima">/ 10</span>
+        <span class="nota-numero" id="notaAnimada">${(0).toFixed(decimales)}</span>
+        <span class="nota-maxima">/ ${escalaNota}</span>
       </div>
 
       <div class="barra-fondo" role="progressbar"
            aria-label="Nota del examen"
-           aria-valuemin="0" aria-valuemax="10"
+           aria-valuemin="0" aria-valuemax="${escalaNota}"
            aria-valuenow="${nota}">
         <div class="barra-progreso" id="barraNota"></div>
       </div>
       <div class="porcentaje-texto">${porcentaje}% del puntaje</div>
+      ${estadoAprobacion}
 
       <div class="tarjetas-datos">
         <div class="dato-tarjeta">
@@ -747,12 +816,12 @@ async function terminarExamen() {
         function animarNota(ahora) {
           const progreso = Math.min((ahora - inicio) / duracion, 1);
           const suave = 1 - Math.pow(1 - progreso, 4);
-          numero.textContent = (nota * suave).toFixed(1);
+          numero.textContent = (nota * suave).toFixed(decimales);
 
           if (progreso < 1) {
             requestAnimationFrame(animarNota);
           } else {
-            numero.textContent = nota.toFixed(1);
+            numero.textContent = nota.toFixed(decimales);
           }
         }
 
