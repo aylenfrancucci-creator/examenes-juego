@@ -199,3 +199,37 @@ button:hover {
   #textoPregunta { font-size: 22px; }
   #opciones .opcion { padding: 14px; }
 }
+
+/* ========================================
+   BOTÓN DE MÚSICA
+======================================== */
+#botonMusica {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  margin: 0;
+  padding: 11px 18px;
+  border: none;
+  border-radius: 999px;
+  background: var(--examen-color-boton, #9d4385);
+  color: #ffffff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: bold;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+#botonMusica[hidden] {
+  display: none;
+}
+
+#botonMusica:hover {
+  transform: scale(1.05);
+}
+
+#botonMusica:focus-visible {
+  outline: 3px solid #1f2937;
+  outline-offset: 3px;
+}
