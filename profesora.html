@@ -224,6 +224,46 @@
 #estadoImagen.exito { color: #15803d; }
 
 /* ==================================================
+   MÚSICA
+================================================== */
+#controlesMusica {
+  margin: 10px 0 24px;
+  padding: 16px;
+  border: 1px solid #ead8e7;
+  border-radius: 14px;
+  background: #fffaff;
+}
+
+#controlesMusica input[type="file"] {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: 2px dashed #d9c8d8;
+  border-radius: 10px;
+  background: white;
+  font: inherit;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+#controlesMusica input[type="range"] {
+  width: 100%;
+  accent-color: #9d4385;
+}
+
+#estadoMusica {
+  min-height: 20px;
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: bold;
+  overflow-wrap: anywhere;
+}
+
+#estadoMusica.error { color: #b91c1c; }
+#estadoMusica.exito { color: #15803d; }
+
+/* ==================================================
    LISTA DE EXÁMENES
 ================================================== */
 #listaExamenes {
@@ -622,6 +662,56 @@
     preguntas. Antes de empezar, los alumnos ven un aviso. Funciona
     mejor si cargás más preguntas de las que responde cada alumno.
   </p>
+
+  <!-- ==================================================
+       MÚSICA DEL EXAMEN
+  ================================================== -->
+  <label class="opcion-proteccion" for="usarMusica">
+    <input type="checkbox" id="usarMusica">
+    🎵 Poner música durante el examen
+  </label>
+  <p class="ayuda">
+    Subí una canción y tus alumnos la van a escuchar mientras rinden.
+    Ellos tienen un botón para silenciarla o volver a activarla.
+  </p>
+
+  <div id="controlesMusica" hidden>
+    <input
+      type="file"
+      id="archivoMusica"
+      accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav"
+    >
+    <p id="estadoMusica" aria-live="polite"></p>
+
+    <label class="campo" for="volumenMusica">
+      Volumen: <span id="valorVolumen">40%</span>
+    </label>
+    <input
+      type="range"
+      id="volumenMusica"
+      min="0"
+      max="100"
+      step="5"
+      value="40"
+    >
+    <p class="ayuda">
+      Usá «Probar» para escuchar cómo suena con este volumen.
+    </p>
+
+    <button type="button" id="botonProbarMusica" onclick="probarMusica()" disabled>
+      ▶ Probar
+    </button>
+    <button type="button" onclick="quitarMusica()">
+      🗑️ Quitar canción
+    </button>
+
+    <p class="ayuda">
+      Formatos: MP3, M4A, WAV u OGG, de hasta 8 MB (un MP3 de 4 a 6 minutos
+      suele entrar). La canción se guarda en tu Google Drive y se comparte
+      con quien tenga el enlace del examen, así que usá música que tengas
+      permiso de usar.
+    </p>
+  </div>
 
   <!-- ==================================================
        PANEL DE DISEÑO
@@ -1132,6 +1222,7 @@ function dibujarLista(examenes) {
         ? ` · aprueba con ${examen.notaMinima}`
         : "") +
       (examen.proteccion ? " · 🛡️ con protección" : "") +
+      (examen.musica ? " · 🎵 con música" : "") +
       fecha;
 
     const acciones = document.createElement("div");
@@ -1390,7 +1481,9 @@ function obtenerDisenoSeleccionado() {
     velo: Number(document.getElementById("veloImagen").value),
     transparenciaCuadro:
       Number(document.getElementById("transparenciaCuadro").value),
-    marcoCuadro: document.getElementById("marcoCuadro").value
+    marcoCuadro: document.getElementById("marcoCuadro").value,
+    musicaId: document.getElementById("usarMusica").checked ? musicaId : "",
+    musicaVolumen: Number(document.getElementById("volumenMusica").value)
   };
 }
 
@@ -1789,6 +1882,191 @@ document.getElementById("autoEstilo").addEventListener("change", evento => {
 });
 
 /* ==================================================
+   MÚSICA DEL EXAMEN
+================================================== */
+const MAX_BYTES_MUSICA = 8 * 1024 * 1024;
+
+let musicaId = "";
+let subiendoMusica = false;
+let audioPrueba = null;
+let urlAudioPrueba = "";
+
+function mostrarEstadoMusica(texto, tipo) {
+  const estado = document.getElementById("estadoMusica");
+  estado.textContent = texto;
+  estado.className = tipo || "";
+}
+
+function pesoLegible(bytes) {
+  if (bytes < 1024 * 1024) {
+    return Math.max(1, Math.round(bytes / 1024)) + " KB";
+  }
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+function leerComoBase64(archivo) {
+  return new Promise((resolver, rechazar) => {
+    const lector = new FileReader();
+    lector.onerror = () =>
+      rechazar(new Error("No se pudo leer el archivo."));
+    lector.onload = () =>
+      resolver(String(lector.result).split(",")[1] || "");
+    lector.readAsDataURL(archivo);
+  });
+}
+
+function actualizarBotonProbar() {
+  const boton = document.getElementById("botonProbarMusica");
+  boton.disabled = !audioPrueba;
+  boton.textContent =
+    audioPrueba && !audioPrueba.paused ? "⏸ Pausar" : "▶ Probar";
+}
+
+function detenerPrueba() {
+  if (audioPrueba) audioPrueba.pause();
+  actualizarBotonProbar();
+}
+
+function liberarPrueba() {
+  if (audioPrueba) audioPrueba.pause();
+  audioPrueba = null;
+  if (urlAudioPrueba) {
+    URL.revokeObjectURL(urlAudioPrueba);
+    urlAudioPrueba = "";
+  }
+  actualizarBotonProbar();
+}
+
+function actualizarVolumenMusica() {
+  const volumen = Number(document.getElementById("volumenMusica").value);
+  document.getElementById("valorVolumen").textContent = volumen + "%";
+  if (audioPrueba) audioPrueba.volume = volumen / 100;
+}
+
+function probarMusica() {
+  if (!audioPrueba) return;
+
+  if (audioPrueba.paused) {
+    audioPrueba.play().catch(() => {});
+  } else {
+    audioPrueba.pause();
+  }
+  actualizarBotonProbar();
+}
+
+async function elegirMusica(evento) {
+  const entrada = evento.target;
+  const archivo = entrada.files[0];
+
+  if (!archivo) return;
+
+  const extensionValida = /\.(mp3|m4a|aac|ogg|wav)$/i.test(archivo.name);
+
+  if (!archivo.type.startsWith("audio/") && !extensionValida) {
+    mostrarEstadoMusica(
+      "Elegí un archivo de audio (MP3, M4A, WAV u OGG).",
+      "error"
+    );
+    entrada.value = "";
+    return;
+  }
+
+  if (archivo.size > MAX_BYTES_MUSICA) {
+    mostrarEstadoMusica(
+      `El archivo pesa ${pesoLegible(archivo.size)} y el máximo es 8 MB. ` +
+      "Probá con un MP3 más liviano o recortá la canción.",
+      "error"
+    );
+    entrada.value = "";
+    return;
+  }
+
+  liberarPrueba();
+  musicaId = "";
+  subiendoMusica = true;
+
+  // Para poder escucharla enseguida, sin esperar la subida
+  urlAudioPrueba = URL.createObjectURL(archivo);
+  audioPrueba = new Audio(urlAudioPrueba);
+  audioPrueba.loop = true;
+  ["play", "pause"].forEach(nombre => {
+    audioPrueba.addEventListener(nombre, actualizarBotonProbar);
+  });
+  actualizarVolumenMusica();
+  actualizarBotonProbar();
+
+  mostrarEstadoMusica("Subiendo la canción a tu Drive...");
+
+  try {
+    const base64 = await leerComoBase64(archivo);
+
+    const respuesta = await fetch(URL_APPS_SCRIPT, {
+      method: "POST",
+      body: JSON.stringify({
+        accion: "subirMusica",
+        clave: claveProfesora,
+        audio: base64
+      })
+    });
+
+    const datos = await respuesta.json();
+
+    if (!datos.ok) {
+      throw new Error(datos.error || "No se pudo subir la canción.");
+    }
+
+    musicaId = datos.id;
+    mostrarEstadoMusica(
+      `✓ «${archivo.name}» (${pesoLegible(archivo.size)}) ` +
+      "lista para usar en el examen.",
+      "exito"
+    );
+
+  } catch (error) {
+    console.error("Error con la música:", error);
+    musicaId = "";
+    liberarPrueba();
+    entrada.value = "";
+    mostrarEstadoMusica(
+      "No se pudo usar la canción: " + error.message,
+      "error"
+    );
+
+  } finally {
+    subiendoMusica = false;
+  }
+}
+
+function quitarMusica() {
+  liberarPrueba();
+  musicaId = "";
+  document.getElementById("archivoMusica").value = "";
+  mostrarEstadoMusica("");
+}
+
+function reiniciarMusica() {
+  quitarMusica();
+  document.getElementById("usarMusica").checked = false;
+  document.getElementById("controlesMusica").hidden = true;
+  document.getElementById("volumenMusica").value = 40;
+  actualizarVolumenMusica();
+}
+
+document.getElementById("usarMusica").addEventListener("change", evento => {
+  document.getElementById("controlesMusica").hidden =
+    !evento.target.checked;
+  if (!evento.target.checked) detenerPrueba();
+});
+
+document
+  .getElementById("archivoMusica")
+  .addEventListener("change", elegirMusica);
+
+document
+  .getElementById("volumenMusica")
+  .addEventListener("input", actualizarVolumenMusica);
+
+/* ==================================================
    FUNCIONES DE PREGUNTAS
 ================================================== */
 function escaparHTML(texto) {
@@ -2122,6 +2400,19 @@ async function crearExamen() {
     return;
   }
 
+  if (subiendoMusica) {
+    alert("Esperá un momento: la canción todavía se está subiendo.");
+    return;
+  }
+
+  if (document.getElementById("usarMusica").checked && !musicaId) {
+    alert(
+      "Elegiste poner música, pero todavía no hay una canción lista. " +
+      "Subí una canción o destildá la opción."
+    );
+    return;
+  }
+
   const preguntas = [];
 
   for (let i = 0; i < tarjetas.length; i++) {
@@ -2224,7 +2515,8 @@ async function crearExamen() {
       (examen.notaMinima !== null
         ? ` · aprueba con ${examen.notaMinima}`
         : "") +
-      (examen.proteccion ? " · 🛡️ con protección" : "");
+      (examen.proteccion ? " · 🛡️ con protección" : "") +
+      (examen.diseno.musicaId ? " · 🎵 con música" : "");
 
     const textoAlumno = document.createElement("p");
     textoAlumno.textContent = "🔗 Enlace para los alumnos:";
@@ -2285,6 +2577,7 @@ async function crearExamen() {
     );
 
     resultadoDiv.scrollIntoView({ behavior: "smooth" });
+    detenerPrueba();
 
     // Si la lista está abierta, se actualiza con el examen nuevo
     if (!document.getElementById("listaExamenes").hidden) {
@@ -2352,6 +2645,7 @@ function nuevoExamen(pedirConfirmacion = true) {
   document.getElementById("transparenciaCuadro").value = 0;
   document.getElementById("marcoCuadro").value = "ninguno";
   document.getElementById("autoEstilo").checked = true;
+  reiniciarMusica();
   quitarImagenFondo();
   seleccionarTema("floral");
 
