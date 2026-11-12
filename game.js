@@ -1,4 +1,4 @@
-console.log("game.js v7 cargado");
+console.log("game.js v8 cargado");
 
 const URL_APPS_SCRIPT =
   "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
@@ -38,7 +38,9 @@ const DISEÑO_PREDETERMINADO = {
   fondoImagenId: "",
   velo: 25,
   transparenciaCuadro: 0,
-  marcoCuadro: "ninguno"
+  marcoCuadro: "ninguno",
+  musicaId: "",
+  musicaVolumen: 40
 };
 
 const ID_IMAGEN_VALIDO = /^[A-Za-z0-9_-]{10,120}$/;
@@ -139,6 +141,149 @@ function estiloCuadro(transparencia, marco, colorTitulo) {
     interno: t > 0 ? "transparent" : "rgba(255,255,255,.94)",
     internoSombra: t > 0 ? "none" : "0 18px 50px rgba(31, 41, 55, 0.12)"
   };
+}
+
+// ==================================================
+// MÚSICA DE FONDO
+// ==================================================
+let audioMusica = null;
+let musicaDisponible = false;
+let musicaIniciada = false;
+
+function prepararMusica(diseno) {
+  if (audioMusica) audioMusica.pause();
+  audioMusica = null;
+  musicaDisponible = false;
+  musicaIniciada = false;
+
+  const id = String((diseno && diseno.musicaId) || "");
+
+  if (!ID_IMAGEN_VALIDO.test(id)) {
+    actualizarBotonMusica();
+    return;
+  }
+
+  const candidatas = [
+    `https://drive.google.com/uc?export=download&id=${id}`,
+    `https://docs.google.com/uc?export=download&id=${id}`
+  ];
+
+  let volumen = Number(diseno.musicaVolumen);
+  if (!isFinite(volumen)) volumen = 40;
+
+  const audio = new Audio();
+  audio.loop = true;
+  audio.preload = "auto";
+  // (En iPhone el volumen lo controla el propio celular)
+  audio.volume = Math.min(Math.max(volumen, 0), 100) / 100;
+
+  // Si una dirección falla, prueba la siguiente.
+  // Si fallan todas, el botón no aparece y el examen sigue normal.
+  let intento = 0;
+  audio.addEventListener("error", () => {
+    intento++;
+    if (intento < candidatas.length) {
+      audio.src = candidatas[intento];
+    } else {
+      console.warn("No se pudo cargar la música.");
+      musicaDisponible = false;
+      actualizarBotonMusica();
+    }
+  });
+
+  ["play", "pause", "volumechange"].forEach(evento => {
+    audio.addEventListener(evento, actualizarBotonMusica);
+  });
+
+  audio.src = candidatas[0];
+  audioMusica = audio;
+  musicaDisponible = true;
+}
+
+function actualizarBotonMusica() {
+  const boton = document.getElementById("botonMusica");
+  if (!boton) return;
+
+  const visible = musicaDisponible && musicaIniciada && !examenTerminado;
+  boton.hidden = !visible;
+
+  if (!audioMusica) return;
+
+  const sonando = !audioMusica.paused && !audioMusica.muted;
+  boton.textContent = sonando ? "🔊 Música" : "🔇 Música";
+  boton.setAttribute(
+    "aria-label",
+    sonando ? "Silenciar la música" : "Activar la música"
+  );
+  boton.title = sonando ? "Silenciar la música" : "Activar la música";
+}
+
+// Se llama al tocar «Comenzar examen» (los navegadores solo dejan
+// sonar música después de un toque del usuario).
+function iniciarMusica() {
+  if (!audioMusica || !musicaDisponible) return;
+
+  musicaIniciada = true;
+
+  if (audioMusica.paused) {
+    const promesa = audioMusica.play();
+    if (promesa && promesa.catch) {
+      // Si el navegador la bloquea, el botón permite activarla
+      promesa.catch(() => {});
+    }
+  }
+
+  actualizarBotonMusica();
+}
+
+function detenerMusica(conFundido) {
+  musicaIniciada = false;
+
+  if (!audioMusica) {
+    actualizarBotonMusica();
+    return;
+  }
+
+  const audio = audioMusica;
+  const volumenOriginal = audio.volume;
+
+  const terminar = () => {
+    audio.pause();
+    try { audio.currentTime = 0; } catch (error) {}
+    audio.volume = volumenOriginal;
+  };
+
+  if (conFundido && !audio.paused && !audio.muted && volumenOriginal > 0) {
+    let pasos = 15;
+    const reloj = setInterval(() => {
+      pasos--;
+      audio.volume = Math.max(0, volumenOriginal * (pasos / 15));
+      if (pasos <= 0) {
+        clearInterval(reloj);
+        terminar();
+      }
+    }, 80);
+  } else {
+    terminar();
+  }
+
+  actualizarBotonMusica();
+}
+
+// Botón del alumno: silenciar / activar
+function alternarMusica() {
+  if (!audioMusica) return;
+
+  if (audioMusica.paused) {
+    // Estaba bloqueada por el navegador: se activa con sonido
+    audioMusica.muted = false;
+    const promesa = audioMusica.play();
+    if (promesa && promesa.catch) promesa.catch(() => {});
+  } else {
+    audioMusica.muted = !audioMusica.muted;
+  }
+
+  actualizarBotonMusica();
 }
 
 // ==================================================
@@ -343,6 +488,7 @@ function cargarExamen() {
           ? configuracionExamen.notaMinima
           : null;
       aplicarDiseno();
+      prepararMusica(configuracionExamen.diseno || {});
 
       document.getElementById("nombreMateria").textContent =
         configuracionExamen.materia;
@@ -385,6 +531,9 @@ async function comenzarExamen() {
     return;
   }
 
+  // La música arranca con este toque (los navegadores lo exigen)
+  iniciarMusica();
+
   // ---------- Una sola oportunidad por examen ----------
   const boton = document.getElementById("botonComenzar");
   const mensajeInicio = document.getElementById("mensajeInicio");
@@ -416,6 +565,7 @@ async function comenzarExamen() {
         ? "Ya realizaste este examen. Si creés que es un error, avisale a tu profesor/a."
         : (datos.error || "No se pudo comenzar el examen. Probá de nuevo.");
       mensajeInicio.style.color = "#b91c1c";
+      detenerMusica(false);
       return;
     }
   } catch (error) {
@@ -423,6 +573,7 @@ async function comenzarExamen() {
     mensajeInicio.textContent =
       "No pudimos verificar tu examen. Revisá tu conexión e intentá de nuevo.";
     mensajeInicio.style.color = "#b91c1c";
+    detenerMusica(false);
     return;
   } finally {
     boton.disabled = false;
@@ -456,6 +607,9 @@ function iniciarExamen() {
   examenEnCurso = true;
   salioDePagina = false;
   horaInicio = new Date();
+
+  // Si el navegador había bloqueado la música, se reintenta con este toque
+  iniciarMusica();
 
   document.getElementById("pantallaInicio").style.display = "none";
   document.getElementById("pantallaAviso").style.display = "none";
@@ -849,6 +1003,7 @@ async function terminarExamen() {
   if (examenTerminado) return;
   examenTerminado = true;
   examenEnCurso = false;
+  detenerMusica(true);
 
   const total = preguntasSeleccionadas.length;
   const decimales = escalaNota === 10 ? 1 : 0;
