@@ -1,4 +1,4 @@
-console.log("game.js v6 cargado");
+console.log("game.js v7 cargado");
 
 const URL_APPS_SCRIPT =
   "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
@@ -36,7 +36,9 @@ const DISEÑO_PREDETERMINADO = {
   colorBoton: "#9d4385",
   fuente: "elegante",
   fondoImagenId: "",
-  velo: 25
+  velo: 25,
+  transparenciaCuadro: 0,
+  marcoCuadro: "ninguno"
 };
 
 const ID_IMAGEN_VALIDO = /^[A-Za-z0-9_-]{10,120}$/;
@@ -112,6 +114,34 @@ function cargarImagenFondo(id, alTerminar) {
 }
 
 // ==================================================
+// CUADRO BLANCO: TRANSPARENCIA Y MARCO
+// ==================================================
+function estiloCuadro(transparencia, marco, colorTitulo) {
+  const t = Math.min(Math.max(Number(transparencia) || 0, 0), 50) / 100;
+  const sombraBase = "0 10px 35px rgba(100, 50, 90, 0.10)";
+
+  let sombra = sombraBase;
+  let borde = "1px solid #f0dce9";
+
+  if (marco === "suave") {
+    // Aro translúcido alrededor del cuadro
+    sombra = `0 0 0 12px rgba(255,255,255,0.35), ${sombraBase}`;
+  } else if (marco === "color") {
+    borde = `4px solid ${colorTitulo}`;
+  }
+
+  return {
+    fondo: `rgba(255,255,255,${1 - t})`,
+    sombra: sombra,
+    borde: borde,
+    // Si el cuadro es transparente, se desenfoca lo que hay detrás
+    blur: t > 0 ? "blur(8px)" : "none",
+    interno: t > 0 ? "transparent" : "rgba(255,255,255,.94)",
+    internoSombra: t > 0 ? "none" : "0 18px 50px rgba(31, 41, 55, 0.12)"
+  };
+}
+
+// ==================================================
 // APLICAR DISEÑO
 // ==================================================
 function aplicarDiseno() {
@@ -142,6 +172,18 @@ function aplicarDiseno() {
       );
     });
   }
+  const cuadro = estiloCuadro(
+    diseno.transparenciaCuadro,
+    diseno.marcoCuadro,
+    diseno.colorTitulo
+  );
+  raiz.setProperty("--examen-cuadro-fondo", cuadro.fondo);
+  raiz.setProperty("--examen-cuadro-sombra", cuadro.sombra);
+  raiz.setProperty("--examen-cuadro-borde", cuadro.borde);
+  raiz.setProperty("--examen-cuadro-blur", cuadro.blur);
+  raiz.setProperty("--examen-interno-fondo", cuadro.interno);
+  raiz.setProperty("--examen-interno-sombra", cuadro.internoSombra);
+
   raiz.setProperty("--examen-color-titulo", diseno.colorTitulo);
   raiz.setProperty("--examen-color-texto", diseno.colorTexto);
   raiz.setProperty("--examen-color-boton", diseno.colorBoton);
@@ -173,6 +215,16 @@ function aplicarDiseno() {
     #pantallaAviso,
     #pantallaExamen {
       color: var(--examen-color-texto);
+      background: var(--examen-cuadro-fondo) !important;
+      box-shadow: var(--examen-cuadro-sombra) !important;
+      border: var(--examen-cuadro-borde) !important;
+      -webkit-backdrop-filter: var(--examen-cuadro-blur);
+      backdrop-filter: var(--examen-cuadro-blur);
+    }
+
+    .resultado-final {
+      background: var(--examen-interno-fondo) !important;
+      box-shadow: var(--examen-interno-sombra) !important;
     }
 
     #nombreMateria,
