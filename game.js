@@ -1,4 +1,4 @@
-console.log("game.js v8 cargado");
+console.log("game.js v9 cargado");
 
 const URL_APPS_SCRIPT =
   "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
@@ -163,6 +163,7 @@ function prepararMusica(diseno) {
     return;
   }
 
+  // 1) Directo desde Drive (rápido, no usa tu Apps Script)
   const candidatas = [
     `https://drive.google.com/uc?export=download&id=${id}`,
     `https://docs.google.com/uc?export=download&id=${id}`
@@ -177,25 +178,83 @@ function prepararMusica(diseno) {
   // (En iPhone el volumen lo controla el propio celular)
   audio.volume = Math.min(Math.max(volumen, 0), 100) / 100;
 
-  // Si una dirección falla, prueba la siguiente.
-  // Si fallan todas, el botón no aparece y el examen sigue normal.
   let intento = 0;
-  audio.addEventListener("error", () => {
+  let usandoScript = false;
+  let temporizador = null;
+
+  function fallo() {
+    console.warn("No se pudo cargar la música.");
+    musicaDisponible = false;
+    actualizarBotonMusica();
+  }
+
+  // 2) Si Drive no la entrega, se pide a través del Apps Script
+  function pedirAlScript() {
+    usandoScript = true;
+    clearTimeout(temporizador);
+
+    fetch(`${URL_APPS_SCRIPT}?musica=${encodeURIComponent(id)}`)
+      .then(respuesta => respuesta.json())
+      .then(datos => {
+        if (!datos.ok || !datos.base64) {
+          throw new Error(datos.error || "No se pudo obtener la música.");
+        }
+
+        const binario = atob(datos.base64);
+        const bytes = new Uint8Array(binario.length);
+        for (let i = 0; i < binario.length; i++) {
+          bytes[i] = binario.charCodeAt(i);
+        }
+
+        const direccion = URL.createObjectURL(
+          new Blob([bytes], { type: datos.mime || "audio/mpeg" })
+        );
+
+        audio.src = direccion;
+
+        // Si el examen ya empezó mientras se descargaba, suena ahora
+        if (musicaIniciada && !examenTerminado) {
+          const promesa = audio.play();
+          if (promesa && promesa.catch) promesa.catch(() => {});
+        }
+      })
+      .catch(error => {
+        console.warn("Música desde el Apps Script:", error);
+        fallo();
+      });
+  }
+
+  function siguiente() {
+    clearTimeout(temporizador);
+    if (usandoScript) {
+      fallo();
+      return;
+    }
+
     intento++;
     if (intento < candidatas.length) {
       audio.src = candidatas[intento];
+      armarTemporizador();
     } else {
-      console.warn("No se pudo cargar la música.");
-      musicaDisponible = false;
-      actualizarBotonMusica();
+      pedirAlScript();
     }
-  });
+  }
+
+  // Si Drive no responde en unos segundos, se pasa a la siguiente opción
+  function armarTemporizador() {
+    clearTimeout(temporizador);
+    temporizador = setTimeout(siguiente, 4000);
+  }
+
+  audio.addEventListener("error", siguiente);
+  audio.addEventListener("loadedmetadata", () => clearTimeout(temporizador));
 
   ["play", "pause", "volumechange"].forEach(evento => {
     audio.addEventListener(evento, actualizarBotonMusica);
   });
 
   audio.src = candidatas[0];
+  armarTemporizador();
   audioMusica = audio;
   musicaDisponible = true;
 }
