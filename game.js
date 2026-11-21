@@ -1,4 +1,4 @@
-console.log("game.js v9 cargado");
+console.log("game.js v10 cargado");
 
 const URL_APPS_SCRIPT =
   "https://script.google.com/macros/s/AKfycbync4Zy8sk82iujKYKrwsBfI4S0j3u6houResIimu9QIY_UPiKeUlTVgVzfANB4vko6/exec";
@@ -1016,6 +1016,29 @@ function agregarEstilosResultado() {
 // MENSAJE SEGÚN NOTA
 // ==================================================
 function obtenerMensajeNota(porcentaje, aprobado) {
+  // Mensajes personalizados por la profesora (si los hay)
+  const diseno = (configuracionExamen && configuracionExamen.diseno) || {};
+  if (Array.isArray(diseno.mensajesFinales) && diseno.mensajesFinales.length) {
+    const tramos = diseno.mensajesFinales
+      .filter(m => m && typeof m === "object")
+      .map(m => ({
+        desde: Number(m.desde) || 0,
+        icono: String(m.icono || ""),
+        titulo: String(m.titulo || ""),
+        mensaje: String(m.mensaje || "")
+      }))
+      .sort((a, b) => b.desde - a.desde);
+
+    const elegido = tramos.find(m => porcentaje >= m.desde);
+    if (elegido) {
+      return {
+        icono: escaparHTML(elegido.icono || "🎓"),
+        titulo: escaparHTML(elegido.titulo),
+        mensaje: escaparHTML(elegido.mensaje)
+      };
+    }
+  }
+
   const perfecto = {
     icono: "🏆", titulo: "¡Perfecto!",
     mensaje: "¡Un examen impecable! Te luciste."
