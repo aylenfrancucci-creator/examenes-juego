@@ -329,6 +329,68 @@
 }
 
 /* ==================================================
+   MENSAJES FINALES
+================================================== */
+#controlesMensajes {
+  margin: 10px 0 24px;
+  padding: 16px;
+  border: 1px solid #ead8e7;
+  border-radius: 14px;
+  background: #fffaff;
+}
+
+.tramo-mensaje {
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid #ead8e7;
+  border-radius: 12px;
+  background: white;
+  text-align: left;
+}
+
+.tramo-mensaje label {
+  display: block;
+  margin: 8px 0 3px;
+  font-size: 13px;
+  font-weight: bold;
+  color: #665a69;
+}
+
+.tramo-mensaje input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.tramo-fila {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tramo-fila > div { flex: 1 1 90px; }
+.tramo-fila > div.ancho { flex: 3 1 200px; }
+
+.tramo-mensaje .quitar-tramo,
+#controlesMensajes .botones-mensajes button {
+  margin: 8px 8px 0 0 !important;
+  padding: 8px 12px;
+  border: 1px solid #d9bfd4;
+  border-radius: 10px;
+  background: #fff7fc;
+  color: #7c3369;
+  font: inherit;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.examen-acciones button.borrar-examen {
+  border-color: #e4b4b4;
+  background: #fff3f3;
+  color: #a12b2b;
+}
+
+/* ==================================================
    PROTECCIÓN AL ABANDONAR
 ================================================== */
 .opcion-proteccion {
@@ -662,6 +724,31 @@
     preguntas. Antes de empezar, los alumnos ven un aviso. Funciona
     mejor si cargás más preguntas de las que responde cada alumno.
   </p>
+
+  <!-- ==================================================
+       MENSAJES FINALES
+  ================================================== -->
+  <label class="opcion-proteccion" for="usarMensajes">
+    <input type="checkbox" id="usarMensajes">
+    💬 Personalizar los mensajes del final
+  </label>
+  <p class="ayuda">
+    Elegí qué mensaje ve cada alumno al terminar, según su porcentaje de
+    aciertos. Si no lo activás, se usan los mensajes de siempre.
+  </p>
+
+  <div id="controlesMensajes" hidden>
+    <div id="listaTramos"></div>
+    <div class="botones-mensajes">
+      <button type="button" onclick="agregarTramo()">➕ Agregar mensaje</button>
+      <button type="button" onclick="cargarMensajesSugeridos()">↺ Volver a los sugeridos</button>
+    </div>
+    <p class="ayuda">
+      Cada alumno ve el mensaje del tramo más alto que alcanzó. Por ejemplo,
+      con tramos desde 0, 50 y 90, quien saca 75% ve el de «desde 50».
+      Tiene que haber uno «desde 0» para que todos tengan mensaje.
+    </p>
+  </div>
 
   <!-- ==================================================
        MÚSICA DEL EXAMEN
@@ -1262,9 +1349,57 @@ function dibujarLista(examenes) {
       acciones.appendChild(resultados);
     }
 
+    const borrar = document.createElement("button");
+    borrar.type = "button";
+    borrar.className = "borrar-examen";
+    borrar.textContent = "🗑️ Borrar";
+    borrar.addEventListener("click", () => borrarExamen(examen, borrar));
+    acciones.appendChild(borrar);
+
     tarjeta.append(titulo, datos, acciones);
     contenido.appendChild(tarjeta);
   });
+}
+
+async function borrarExamen(examen, boton) {
+  const nombre = examen.materia || "(sin materia)";
+
+  if (!confirm(
+    `¿Borrar el examen «${nombre}»?\n\n` +
+    "• El enlace deja de funcionar y los alumnos ya no podrán abrirlo.\n" +
+    "• La planilla de resultados NO se borra: seguís viendo las notas.\n" +
+    "• No se puede deshacer."
+  )) {
+    return;
+  }
+
+  boton.disabled = true;
+  boton.textContent = "Borrando...";
+
+  try {
+    const respuesta = await fetch(URL_APPS_SCRIPT, {
+      method: "POST",
+      body: JSON.stringify({
+        accion: "borrarExamen",
+        clave: claveProfesora,
+        id: examen.id
+      })
+    });
+
+    const datos = await respuesta.json();
+
+    if (!datos.ok) {
+      throw new Error(datos.error || "No se pudo borrar.");
+    }
+
+    cargarLista();
+
+  } catch (error) {
+    console.error("Error al borrar el examen:", error);
+    alert("No se pudo borrar el examen: " + error.message);
+    boton.disabled = false;
+    boton.textContent = "🗑️ Borrar";
+  }
 }
 
 function salir() {
@@ -1483,8 +1618,91 @@ function obtenerDisenoSeleccionado() {
       Number(document.getElementById("transparenciaCuadro").value),
     marcoCuadro: document.getElementById("marcoCuadro").value,
     musicaId: document.getElementById("usarMusica").checked ? musicaId : "",
-    musicaVolumen: Number(document.getElementById("volumenMusica").value)
+    musicaVolumen: Number(document.getElementById("volumenMusica").value),
+    mensajesFinales: leerMensajesFinales()
   };
+}
+
+/* ==================================================
+   MENSAJES FINALES (editor)
+================================================== */
+const MENSAJES_SUGERIDOS = [
+  { desde: 90, icono: "🏆", titulo: "¡Excelente!", mensaje: "Dominás el tema. ¡Felicitaciones!" },
+  { desde: 70, icono: "🌟", titulo: "¡Muy bien!", mensaje: "Vas por muy buen camino." },
+  { desde: 50, icono: "💪", titulo: "¡Bien, pero podés mejorar!", mensaje: "Repasá los temas que más te costaron." },
+  { desde: 0, icono: "📚", titulo: "¡A seguir estudiando!", mensaje: "Repasá el material y consultá tus dudas." }
+];
+
+function agregarTramo(datos) {
+  const lista = document.getElementById("listaTramos");
+
+  if (lista.children.length >= 6) {
+    alert("Podés poner hasta 6 mensajes.");
+    return;
+  }
+
+  const t = datos || { desde: 0, icono: "", titulo: "", mensaje: "" };
+
+  const caja = document.createElement("div");
+  caja.className = "tramo-mensaje";
+  caja.innerHTML = `
+    <div class="tramo-fila">
+      <div>
+        <label>Desde (%)</label>
+        <input type="number" class="t-desde" min="0" max="100" step="1">
+      </div>
+      <div>
+        <label>Icono</label>
+        <input type="text" class="t-icono" maxlength="4" placeholder="🎉">
+      </div>
+      <div class="ancho">
+        <label>Título</label>
+        <input type="text" class="t-titulo" maxlength="60" placeholder="¡Muy bien!">
+      </div>
+    </div>
+    <label>Mensaje</label>
+    <input type="text" class="t-mensaje" maxlength="200" placeholder="Escribí tu mensaje">
+    <button type="button" class="quitar-tramo">🗑️ Quitar este mensaje</button>
+  `;
+
+  caja.querySelector(".t-desde").value = t.desde;
+  caja.querySelector(".t-icono").value = t.icono;
+  caja.querySelector(".t-titulo").value = t.titulo;
+  caja.querySelector(".t-mensaje").value = t.mensaje;
+  caja.querySelector(".quitar-tramo").addEventListener("click", () => caja.remove());
+
+  lista.appendChild(caja);
+}
+
+function cargarMensajesSugeridos() {
+  document.getElementById("listaTramos").innerHTML = "";
+  MENSAJES_SUGERIDOS.forEach(agregarTramo);
+}
+
+function leerMensajesFinales() {
+  if (!document.getElementById("usarMensajes").checked) return [];
+
+  return [...document.querySelectorAll("#listaTramos .tramo-mensaje")]
+    .map(caja => ({
+      desde: Math.min(Math.max(Math.round(Number(caja.querySelector(".t-desde").value)) || 0, 0), 100),
+      icono: caja.querySelector(".t-icono").value.trim(),
+      titulo: caja.querySelector(".t-titulo").value.trim(),
+      mensaje: caja.querySelector(".t-mensaje").value.trim()
+    }))
+    .filter(m => m.titulo || m.mensaje);
+}
+
+document.getElementById("usarMensajes").addEventListener("change", evento => {
+  document.getElementById("controlesMensajes").hidden = !evento.target.checked;
+  if (evento.target.checked && !document.getElementById("listaTramos").children.length) {
+    cargarMensajesSugeridos();
+  }
+});
+
+function reiniciarMensajes() {
+  document.getElementById("usarMensajes").checked = false;
+  document.getElementById("controlesMensajes").hidden = true;
+  document.getElementById("listaTramos").innerHTML = "";
 }
 
 document
@@ -2413,6 +2631,18 @@ async function crearExamen() {
     return;
   }
 
+  if (document.getElementById("usarMensajes").checked) {
+    const mensajes = leerMensajesFinales();
+    if (!mensajes.length) {
+      alert("Activaste los mensajes del final pero no escribiste ninguno. Escribí al menos uno o destildá la opción.");
+      return;
+    }
+    if (!mensajes.some(m => m.desde === 0)) {
+      alert("Tiene que haber un mensaje que empiece «desde 0 %», así todos los alumnos reciben uno.");
+      return;
+    }
+  }
+
   const preguntas = [];
 
   for (let i = 0; i < tarjetas.length; i++) {
@@ -2646,6 +2876,7 @@ function nuevoExamen(pedirConfirmacion = true) {
   document.getElementById("marcoCuadro").value = "ninguno";
   document.getElementById("autoEstilo").checked = true;
   reiniciarMusica();
+  reiniciarMensajes();
   quitarImagenFondo();
   seleccionarTema("floral");
 
